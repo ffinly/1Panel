@@ -1,6 +1,12 @@
 <template>
     <div>
-        <el-drawer v-model="drawerVisible" :destroy-on-close="true" :close-on-click-modal="false" size="30%">
+        <el-drawer
+            v-model="drawerVisible"
+            :destroy-on-close="true"
+            :close-on-click-modal="false"
+            :close-on-press-escape="false"
+            size="30%"
+        >
             <template #header>
                 <DrawerHeader :header="$t('setting.allowIPs')" :back="handleClose" />
             </template>
@@ -18,7 +24,7 @@
                             <el-input
                                 type="textarea"
                                 :placeholder="$t('setting.allowIPEgs')"
-                                :autosize="{ minRows: 8, maxRows: 10 }"
+                                :rows="3"
                                 v-model="form.allowIPs"
                             />
                             <span class="input-help">{{ $t('setting.allowIPsHelper1') }}</span>
@@ -58,6 +64,9 @@ function checkAddress(rule: any, value: any, callback: any) {
     if (form.allowIPs !== '') {
         let addrs = form.allowIPs.split('\n');
         for (const item of addrs) {
+            if (item === '') {
+                continue;
+            }
             if (item === '0.0.0.0') {
                 return callback(new Error(i18n.global.t('firewall.addressFormatError')));
             }
@@ -102,8 +111,14 @@ const onSave = async (formEl: FormInstance | undefined) => {
             type: 'info',
         }).then(async () => {
             loading.value = true;
-
-            await updateSetting({ key: 'AllowIPs', value: form.allowIPs.replaceAll('\n', ',') })
+            let ipItems = form.allowIPs.split('\n');
+            let ips = [];
+            for (const item of ipItems) {
+                if (item !== '') {
+                    ips.push(item);
+                }
+            }
+            await updateSetting({ key: 'AllowIPs', value: ips.join(',') })
                 .then(() => {
                     loading.value = false;
                     MsgSuccess(i18n.global.t('commons.msg.operationSuccess'));

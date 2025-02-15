@@ -3,6 +3,7 @@ package helper
 import (
 	"context"
 	"fmt"
+	"github.com/1Panel-dev/1Panel/cmd/server/res"
 	"net/http"
 	"strconv"
 
@@ -115,7 +116,7 @@ func GetTxAndContext() (tx *gorm.DB, ctx context.Context) {
 }
 
 func CheckBindAndValidate(req interface{}, c *gin.Context) error {
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(req); err != nil {
 		ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
 		return err
 	}
@@ -124,4 +125,32 @@ func CheckBindAndValidate(req interface{}, c *gin.Context) error {
 		return err
 	}
 	return nil
+}
+
+func CheckBind(req interface{}, c *gin.Context) error {
+	if err := c.ShouldBindJSON(&req); err != nil {
+		ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+		return err
+	}
+	return nil
+}
+
+func ErrWithHtml(ctx *gin.Context, code int, scope string) {
+	if code == 444 {
+		ctx.String(444, "")
+		ctx.Abort()
+		return
+	}
+	file := fmt.Sprintf("html/%d.html", code)
+	if code == 200 && scope != "" {
+		file = fmt.Sprintf("html/200_%s.html", scope)
+	}
+	data, err := res.ErrorMsg.ReadFile(file)
+	if err != nil {
+		ctx.String(http.StatusInternalServerError, "Internal Server Error")
+		ctx.Abort()
+		return
+	}
+	ctx.Data(code, "text/html; charset=utf-8", data)
+	ctx.Abort()
 }

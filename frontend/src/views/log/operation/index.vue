@@ -2,8 +2,8 @@
     <div>
         <LayoutContent v-loading="loading" :title="$t('logs.operation')">
             <template #toolbar>
-                <el-row>
-                    <el-col :xs="24" :sm="16" :md="16" :lg="16" :xl="16">
+                <div class="flex justify-between gap-2 flex-wrap sm:flex-row">
+                    <div class="flex flex-wrap gap-3">
                         <el-button type="primary" class="tag-button" @click="onChangeRoute('OperationLog')">
                             {{ $t('logs.operation') }}
                         </el-button>
@@ -13,48 +13,40 @@
                         <el-button class="tag-button no-active" @click="onChangeRoute('SystemLog')">
                             {{ $t('logs.system') }}
                         </el-button>
-                    </el-col>
-                    <el-col :xs="24" :sm="8" :md="8" :lg="8" :xl="8">
+                    </div>
+                    <div class="flex flex-wrap gap-3">
                         <TableSetting @search="search()" />
-                        <div class="search-button">
-                            <el-input
-                                v-model="searchName"
-                                clearable
-                                @clear="search()"
-                                suffix-icon="Search"
-                                @keyup.enter="search()"
-                                @change="search()"
-                                :placeholder="$t('commons.button.search')"
-                            ></el-input>
-                        </div>
-                    </el-col>
-                </el-row>
+                        <TableSearch @search="search()" v-model:searchName="searchName" />
+                    </div>
+                </div>
             </template>
             <template #search>
-                <el-select v-model="searchGroup" @change="search()" clearable>
-                    <template #prefix>{{ $t('logs.resource') }}</template>
-                    <el-option :label="$t('commons.table.all')" value=""></el-option>
-                    <el-option :label="$t('logs.detail.apps')" value="apps"></el-option>
-                    <el-option :label="$t('logs.detail.websites')" value="websites"></el-option>
-                    <el-option :label="$t('logs.detail.runtimes')" value="runtimes"></el-option>
-                    <el-option :label="$t('logs.detail.databases')" value="databases"></el-option>
-                    <el-option :label="$t('logs.detail.containers')" value="containers"></el-option>
-                    <el-option :label="$t('logs.detail.cronjobs')" value="cronjobs"></el-option>
-                    <el-option :label="$t('logs.detail.files')" value="files"></el-option>
-                    <el-option :label="$t('logs.detail.hosts')" value="hosts"></el-option>
-                    <el-option :label="$t('logs.detail.process')" value="process"></el-option>
-                    <el-option :label="$t('logs.detail.logs')" value="logs"></el-option>
-                    <el-option :label="$t('logs.detail.settings')" value="settings"></el-option>
-                </el-select>
-                <el-select v-model="searchStatus" @change="search()" clearable style="margin-left: 10px">
-                    <template #prefix>{{ $t('commons.table.status') }}</template>
-                    <el-option :label="$t('commons.table.all')" value=""></el-option>
-                    <el-option :label="$t('commons.status.success')" value="Success"></el-option>
-                    <el-option :label="$t('commons.status.failed')" value="Failed"></el-option>
-                </el-select>
-                <el-button type="primary" style="margin-left: 10px" plain @click="onClean()">
-                    {{ $t('logs.deleteLogs') }}
-                </el-button>
+                <div class="flex flex-wrap gap-2 sm:gap-4 items-center">
+                    <el-select v-model="searchGroup" @change="search()" clearable class="p-w-200">
+                        <template #prefix>{{ $t('logs.resource') }}</template>
+                        <el-option :label="$t('commons.table.all')" value=""></el-option>
+                        <el-option :label="$t('logs.detail.apps')" value="apps"></el-option>
+                        <el-option :label="$t('logs.detail.websites')" value="websites"></el-option>
+                        <el-option :label="$t('logs.detail.runtimes')" value="runtimes"></el-option>
+                        <el-option :label="$t('logs.detail.databases')" value="databases"></el-option>
+                        <el-option :label="$t('logs.detail.containers')" value="containers"></el-option>
+                        <el-option :label="$t('logs.detail.cronjobs')" value="cronjobs"></el-option>
+                        <el-option :label="$t('logs.detail.files')" value="files"></el-option>
+                        <el-option :label="$t('logs.detail.hosts')" value="hosts"></el-option>
+                        <el-option :label="$t('logs.detail.process')" value="process"></el-option>
+                        <el-option :label="$t('logs.detail.logs')" value="logs"></el-option>
+                        <el-option :label="$t('logs.detail.settings')" value="settings"></el-option>
+                    </el-select>
+                    <el-select v-model="searchStatus" @change="search()" clearable class="p-w-200">
+                        <template #prefix>{{ $t('commons.table.status') }}</template>
+                        <el-option :label="$t('commons.table.all')" value=""></el-option>
+                        <el-option :label="$t('commons.status.success')" value="Success"></el-option>
+                        <el-option :label="$t('commons.status.failed')" value="Failed"></el-option>
+                    </el-select>
+                    <el-button type="primary" plain @click="onClean()">
+                        {{ $t('logs.deleteLogs') }}
+                    </el-button>
+                </div>
             </template>
             <template #main>
                 <ComplexTable :pagination-config="paginationConfig" :data="data" @search="search">
@@ -109,11 +101,10 @@
 </template>
 
 <script setup lang="ts">
-import TableSetting from '@/components/table-setting/index.vue';
 import ConfirmDialog from '@/components/confirm-dialog/index.vue';
 import { dateFormat } from '@/utils/util';
 import { cleanLogs, getOperationLogs } from '@/api/modules/log';
-import { onMounted, reactive, ref } from '@vue/runtime-core';
+import { onMounted, reactive, ref } from 'vue';
 import i18n from '@/lang';
 import { MsgSuccess } from '@/utils/message';
 import { GlobalStore } from '@/store';
@@ -192,6 +183,9 @@ const loadDetail = (log: string) => {
     if (log.indexOf('[get]') !== -1) {
         log = log.replace('[get]', '[' + i18n.global.t('commons.button.get') + ']');
     }
+    if (log.indexOf('[operate]') !== -1) {
+        log = log.replace('[operate]', '[' + i18n.global.t('commons.table.operate') + ']');
+    }
     if (log.indexOf('[UserName]') !== -1) {
         return log.replace('[UserName]', '[' + i18n.global.t('commons.login.username') + ']');
     }
@@ -203,6 +197,9 @@ const loadDetail = (log: string) => {
     }
     if (log.indexOf('[Theme]') !== -1) {
         return log.replace('[Theme]', '[' + i18n.global.t('setting.theme') + ']');
+    }
+    if (log.indexOf('[MenuTabs]') !== -1) {
+        return log.replace('[MenuTabs]', '[' + i18n.global.t('setting.menuTabs') + ']');
     }
     if (log.indexOf('[SessionTimeout]') !== -1) {
         return log.replace('[SessionTimeout]', '[' + i18n.global.t('setting.sessionTimeout') + ']');
@@ -231,6 +228,9 @@ const loadDetail = (log: string) => {
     if (log.indexOf('[MonitorStoreDays]') !== -1) {
         return log.replace('[MonitorStoreDays]', '[' + i18n.global.t('setting.monitor') + ']');
     }
+    if (log.indexOf('[ApiInterfaceStatus]') !== -1) {
+        return log.replace('[ApiInterfaceStatus]', '[' + i18n.global.t('setting.apiInterface') + ']');
+    }
     return log;
 };
 
@@ -244,3 +244,11 @@ onMounted(() => {
     search();
 });
 </script>
+<style scoped lang="scss">
+.tag-button {
+    &.no-active {
+        background: none;
+        border: none;
+    }
+}
+</style>

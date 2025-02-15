@@ -8,7 +8,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { MenuStore } from '@/store/modules/menu';
+import { MenuStore } from '@/store';
 const menuStore = MenuStore();
 const isCollapse = computed(() => menuStore.isCollapse);
 </script>
@@ -18,11 +18,12 @@ const isCollapse = computed(() => menuStore.isCollapse);
     display: flex;
     align-items: center;
     box-sizing: border-box;
-    border-top: 1px solid #e4e7ed;
+    border-top: 1px solid var(--panel-footer-border);
     height: 48px;
 }
 
 .collapse-icon {
+    color: var(--panel-main-bg-color-1);
     margin-left: 25px;
     &:hover {
         color: $primary-color;
