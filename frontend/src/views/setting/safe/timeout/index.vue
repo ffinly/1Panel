@@ -1,6 +1,12 @@
 <template>
     <div>
-        <el-drawer v-model="drawerVisible" :destroy-on-close="true" :close-on-click-modal="false" size="30%">
+        <el-drawer
+            v-model="drawerVisible"
+            :destroy-on-close="true"
+            :close-on-click-modal="false"
+            :close-on-press-escape="false"
+            size="30%"
+        >
             <template #header>
                 <DrawerHeader :header="$t('setting.expirationTime')" :back="handleClose" />
             </template>
@@ -10,7 +16,7 @@
                         <el-form-item
                             :label="$t('setting.days')"
                             prop="days"
-                            :rules="[Rules.number, checkNumberRange(0, 60)]"
+                            :rules="[Rules.integerNumberWith0, checkNumberRange(0, 60)]"
                         >
                             <el-input clearable v-model.number="form.days" />
                             <span class="input-help">{{ $t('setting.expirationHelper') }}</span>

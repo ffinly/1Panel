@@ -57,7 +57,7 @@
                         :placeholder="$t('commons.msg.noneData')"
                         :indent-with-tab="true"
                         :tabSize="4"
-                        style="margin-top: 10px; height: calc(100vh - 375px)"
+                        :style="{ height: `calc(100vh - ${loadHeight()})`, 'margin-top': '10px' }"
                         :lineWrapping="true"
                         :matchBrackets="true"
                         theme="cobalt"
@@ -147,12 +147,14 @@ import { onMounted, reactive, ref } from 'vue';
 import { Codemirror } from 'vue-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { oneDark } from '@codemirror/theme-one-dark';
-import { loadDatabaseFile, loadMysqlBaseInfo, loadMysqlVariables, updateMysqlConfByFile } from '@/api/modules/database';
+import { loadDBFile, loadDBBaseInfo, loadMysqlVariables, updateDBFile } from '@/api/modules/database';
 import { ChangePort, CheckAppInstalled, GetAppDefaultConfig } from '@/api/modules/app';
 import { Rules } from '@/global/form-rules';
 import i18n from '@/lang';
 import { MsgSuccess } from '@/utils/message';
 import router from '@/routers';
+import { GlobalStore } from '@/store';
+const globalStore = GlobalStore();
 
 const loading = ref(false);
 
@@ -196,6 +198,10 @@ const jumpToConf = async () => {
     loadMysqlConf();
 };
 
+const loadHeight = () => {
+    return globalStore.openMenuTabs ? '405px' : '375px';
+};
+
 const jumpToSlowlog = async () => {
     activeName.value = 'slowLog';
     loadSlowLogs();
@@ -230,7 +236,6 @@ const onSavePort = async (formEl: FormInstance | undefined) => {
         submitInputInfo: i18n.global.t('database.restartNow'),
     };
     confirmPortRef.value!.acceptParams(params);
-    return;
 };
 function callback(error: any) {
     if (error) {
@@ -260,7 +265,7 @@ const onSubmitChangeConf = async () => {
         file: mysqlConf.value,
     };
     loading.value = true;
-    await updateMysqlConfByFile(param)
+    await updateDBFile(param)
         .then(() => {
             useOld.value = false;
             loading.value = false;
@@ -286,7 +291,7 @@ const loadContainerLog = async (containerID: string) => {
 };
 
 const loadBaseInfo = async () => {
-    const res = await loadMysqlBaseInfo(props.type, props.database);
+    const res = await loadDBBaseInfo(props.type, props.database);
     mysqlName.value = res.data?.name;
     baseInfo.port = res.data?.port;
     baseInfo.containerID = res.data?.containerName;
@@ -323,7 +328,7 @@ const loadSlowLogs = async () => {
 
 const loadMysqlConf = async () => {
     useOld.value = false;
-    await loadDatabaseFile(props.type + '-conf', props.database)
+    await loadDBFile(props.type + '-conf', props.database)
         .then((res) => {
             loading.value = false;
             mysqlConf.value = res.data;

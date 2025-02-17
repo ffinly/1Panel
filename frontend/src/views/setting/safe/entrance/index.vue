@@ -1,6 +1,12 @@
 <template>
     <div>
-        <el-drawer v-model="drawerVisible" :destroy-on-close="true" :close-on-click-modal="false" size="30%">
+        <el-drawer
+            v-model="drawerVisible"
+            :destroy-on-close="true"
+            :close-on-click-modal="false"
+            :close-on-press-escape="false"
+            size="30%"
+        >
             <template #header>
                 <DrawerHeader :header="$t('setting.entrance')" :back="handleClose" />
             </template>
@@ -72,7 +78,7 @@ const rules = reactive({
 
 function checkSecurityEntrance(rule: any, value: any, callback: any) {
     if (form.securityEntrance !== '') {
-        const reg = /^[A-Za-z0-9]{6,10}$/;
+        const reg = /^[A-Za-z0-9]{5,116}$/;
         if (!reg.test(form.securityEntrance)) {
             return callback(new Error(i18n.global.t('setting.entranceError')));
         }

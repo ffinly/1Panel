@@ -10,35 +10,41 @@ import (
 	"strings"
 	"time"
 
+	"github.com/1Panel-dev/1Panel/backend/buserr"
+
 	"github.com/1Panel-dev/1Panel/backend/app/dto"
 	"github.com/1Panel-dev/1Panel/backend/app/model"
 	"github.com/1Panel-dev/1Panel/backend/constant"
 	"github.com/1Panel-dev/1Panel/backend/global"
+	"github.com/1Panel-dev/1Panel/backend/utils/common"
 	"github.com/1Panel-dev/1Panel/backend/utils/compose"
 	"github.com/1Panel-dev/1Panel/backend/utils/files"
 	"github.com/pkg/errors"
 )
 
-func (u *BackupService) AppBackup(req dto.CommonBackup) error {
+func (u *BackupService) AppBackup(req dto.CommonBackup) (*model.BackupRecord, error) {
 	localDir, err := loadLocalDir()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	app, err := appRepo.GetFirst(appRepo.WithKey(req.Name))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	install, err := appInstallRepo.GetFirst(commonRepo.WithByName(req.DetailName), appInstallRepo.WithAppId(app.ID))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	timeNow := time.Now().Format("20060102150405")
+	timeNow := time.Now().Format(constant.DateTimeSlimLayout)
+	itemDir := fmt.Sprintf("app/%s/%s", req.Name, req.DetailName)
+	backupDir := path.Join(localDir, itemDir)
 
-	backupDir := path.Join(localDir, fmt.Sprintf("app/%s/%s", req.Name, req.DetailName))
-
-	fileName := fmt.Sprintf("%s_%s.tar.gz", req.DetailName, timeNow)
-	if err := handleAppBackup(&install, backupDir, fileName); err != nil {
-		return err
+	fileName := req.FileName
+	if req.FileName == "" {
+		fileName = fmt.Sprintf("%s_%s.tar.gz", req.DetailName, timeNow+common.RandStrAndNum(5))
+	}
+	if err := handleAppBackup(&install, backupDir, fileName, "", req.Secret); err != nil {
+		return nil, err
 	}
 
 	record := &model.BackupRecord{
@@ -47,15 +53,15 @@ func (u *BackupService) AppBackup(req dto.CommonBackup) error {
 		DetailName: req.DetailName,
 		Source:     "LOCAL",
 		BackupType: "LOCAL",
-		FileDir:    backupDir,
+		FileDir:    itemDir,
 		FileName:   fileName,
 	}
 
 	if err := backupRepo.CreateRecord(record); err != nil {
 		global.LOG.Errorf("save backup record failed, err: %v", err)
-		return err
+		return nil, err
 	}
-	return nil
+	return record, nil
 }
 
 func (u *BackupService) AppRecover(req dto.CommonRecover) error {
@@ -70,18 +76,18 @@ func (u *BackupService) AppRecover(req dto.CommonRecover) error {
 
 	fileOp := files.NewFileOp()
 	if !fileOp.Stat(req.File) {
-		return errors.New(fmt.Sprintf("%s file is not exist", req.File))
+		return buserr.WithName("ErrFileNotFound", req.File)
 	}
 	if _, err := compose.Down(install.GetComposePath()); err != nil {
 		return err
 	}
-	if err := handleAppRecover(&install, req.File, false); err != nil {
+	if err := handleAppRecover(&install, req.File, false, req.Secret); err != nil {
 		return err
 	}
 	return nil
 }
 
-func handleAppBackup(install *model.AppInstall, backupDir, fileName string) error {
+func handleAppBackup(install *model.AppInstall, backupDir, fileName string, excludes string, secret string) error {
 	fileOp := files.NewFileOp()
 	tmpDir := fmt.Sprintf("%s/%s", backupDir, strings.ReplaceAll(fileName, ".tar.gz", ""))
 	if !fileOp.Stat(tmpDir) {
@@ -100,33 +106,42 @@ func handleAppBackup(install *model.AppInstall, backupDir, fileName string) erro
 	}
 
 	appPath := install.GetPath()
-	if err := handleTar(appPath, tmpDir, "app.tar.gz", ""); err != nil {
+	if err := handleTar(appPath, tmpDir, "app.tar.gz", excludes, ""); err != nil {
 		return err
 	}
 
 	resources, _ := appInstallResourceRepo.GetBy(appInstallResourceRepo.WithAppInstallId(install.ID))
 	for _, resource := range resources {
-		if resource.Key == "mysql" || resource.Key == "mariadb" {
+		switch resource.Key {
+		case constant.AppMysql, constant.AppMariaDB:
 			db, err := mysqlRepo.Get(commonRepo.WithByID(resource.ResourceId))
 			if err != nil {
 				return err
 			}
-			if err := handleMysqlBackup(db.MysqlName, db.Name, tmpDir, fmt.Sprintf("%s.sql.gz", install.Name)); err != nil {
+			if err := handleMysqlBackup(db.MysqlName, resource.Key, db.Name, tmpDir, fmt.Sprintf("%s.sql.gz", install.Name)); err != nil {
+				return err
+			}
+		case constant.AppPostgresql:
+			db, err := postgresqlRepo.Get(commonRepo.WithByID(resource.ResourceId))
+			if err != nil {
+				return err
+			}
+			if err := handlePostgresqlBackup(db.PostgresqlName, db.Name, tmpDir, fmt.Sprintf("%s.sql.gz", install.Name)); err != nil {
 				return err
 			}
 		}
 	}
 
-	if err := handleTar(tmpDir, backupDir, fileName, ""); err != nil {
+	if err := handleTar(tmpDir, backupDir, fileName, "", secret); err != nil {
 		return err
 	}
 	return nil
 }
 
-func handleAppRecover(install *model.AppInstall, recoverFile string, isRollback bool) error {
+func handleAppRecover(install *model.AppInstall, recoverFile string, isRollback bool, secret string) error {
 	isOk := false
 	fileOp := files.NewFileOp()
-	if err := handleUnTar(recoverFile, path.Dir(recoverFile)); err != nil {
+	if err := handleUnTar(recoverFile, path.Dir(recoverFile), secret); err != nil {
 		return err
 	}
 	tmpPath := strings.ReplaceAll(recoverFile, ".tar.gz", "")
@@ -151,14 +166,14 @@ func handleAppRecover(install *model.AppInstall, recoverFile string, isRollback 
 	}
 
 	if !isRollback {
-		rollbackFile := path.Join(global.CONF.System.TmpDir, fmt.Sprintf("app/%s_%s.tar.gz", install.Name, time.Now().Format("20060102150405")))
-		if err := handleAppBackup(install, path.Dir(rollbackFile), path.Base(rollbackFile)); err != nil {
+		rollbackFile := path.Join(global.CONF.System.TmpDir, fmt.Sprintf("app/%s_%s.tar.gz", install.Name, time.Now().Format(constant.DateTimeSlimLayout)))
+		if err := handleAppBackup(install, path.Dir(rollbackFile), path.Base(rollbackFile), "", ""); err != nil {
 			return fmt.Errorf("backup app %s for rollback before recover failed, err: %v", install.Name, err)
 		}
 		defer func() {
 			if !isOk {
 				global.LOG.Info("recover failed, start to rollback now")
-				if err := handleAppRecover(install, rollbackFile, true); err != nil {
+				if err := handleAppRecover(install, rollbackFile, true, secret); err != nil {
 					global.LOG.Errorf("rollback app %s from %s failed, err: %v", install.Name, rollbackFile, err)
 					return
 				}
@@ -190,7 +205,21 @@ func handleAppRecover(install *model.AppInstall, recoverFile string, isRollback 
 				return err
 			}
 		}
-		if database.Type == "mysql" || database.Type == "mariadb" {
+		switch database.Type {
+		case constant.AppPostgresql:
+			db, err := postgresqlRepo.Get(commonRepo.WithByID(resource.ResourceId))
+			if err != nil {
+				return err
+			}
+			if err := handlePostgresqlRecover(dto.CommonRecover{
+				Name:       database.Name,
+				DetailName: db.Name,
+				File:       fmt.Sprintf("%s/%s.sql.gz", tmpPath, install.Name),
+			}, true); err != nil {
+				global.LOG.Errorf("handle recover from sql.gz failed, err: %v", err)
+				return err
+			}
+		case constant.AppMysql, constant.AppMariaDB:
 			db, err := mysqlRepo.Get(commonRepo.WithByID(resource.ResourceId))
 			if err != nil {
 				return err
@@ -225,7 +254,7 @@ func handleAppRecover(install *model.AppInstall, recoverFile string, isRollback 
 	_ = fileOp.Rename(appDir, backPath)
 	_ = fileOp.CreateDir(appDir, 0755)
 
-	if err := handleUnTar(tmpPath+"/app.tar.gz", fmt.Sprintf("%s/%s", constant.AppInstallDir, install.App.Key)); err != nil {
+	if err := handleUnTar(tmpPath+"/app.tar.gz", install.GetAppPath(), ""); err != nil {
 		global.LOG.Errorf("handle recover from app.tar.gz failed, err: %v", err)
 		_ = fileOp.DeleteDir(appDir)
 		_ = fileOp.Rename(backPath, appDir)
@@ -234,7 +263,7 @@ func handleAppRecover(install *model.AppInstall, recoverFile string, isRollback 
 	_ = fileOp.DeleteDir(backPath)
 
 	if len(newEnvFile) != 0 {
-		envPath := fmt.Sprintf("%s/%s/%s/.env", constant.AppInstallDir, install.App.Key, install.Name)
+		envPath := fmt.Sprintf("%s/%s/.env", install.GetAppPath(), install.Name)
 		file, err := os.OpenFile(envPath, os.O_WRONLY|os.O_TRUNC, 0640)
 		if err != nil {
 			return err
@@ -278,6 +307,10 @@ func reCreateDB(dbID uint, database model.Database, oldEnv string) (*model.Datab
 		Password:   oldPassword,
 		Permission: "%",
 	})
+	cronjobs, _ := cronjobRepo.List(cronjobRepo.WithByDbName(fmt.Sprintf("%v", dbID)))
+	for _, job := range cronjobs {
+		_ = cronjobRepo.Update(job.ID, map[string]interface{}{"db_name": fmt.Sprintf("%v", createDB.ID)})
+	}
 	if err != nil {
 		return nil, envMap, err
 	}

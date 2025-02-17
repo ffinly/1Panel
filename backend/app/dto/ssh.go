@@ -2,7 +2,14 @@ package dto
 
 import "time"
 
+type SSHUpdate struct {
+	Key      string `json:"key" validate:"required"`
+	OldValue string `json:"oldValue"`
+	NewValue string `json:"newValue"`
+}
+
 type SSHInfo struct {
+	AutoStart              bool   `json:"autoStart"`
 	Status                 string `json:"status"`
 	Message                string `json:"message"`
 	Port                   string `json:"port"`
@@ -35,26 +42,6 @@ type SSHLog struct {
 	TotalCount      int          `json:"totalCount"`
 	SuccessfulCount int          `json:"successfulCount"`
 	FailedCount     int          `json:"failedCount"`
-}
-
-type SearchForAnalysis struct {
-	PageInfo
-	OrderBy string `json:"orderBy" validate:"required,oneof=Success Failed"`
-}
-
-type AnalysisRes struct {
-	Total           int64            `json:"total"`
-	Items           []SSHLogAnalysis `json:"items"`
-	SuccessfulCount int              `json:"successfulCount"`
-	FailedCount     int              `json:"failedCount"`
-}
-
-type SSHLogAnalysis struct {
-	Address         string `json:"address"`
-	Area            string `json:"area"`
-	SuccessfulCount int    `json:"successfulCount"`
-	FailedCount     int    `json:"failedCount"`
-	Status          string `json:"status"`
 }
 
 type SSHHistory struct {
