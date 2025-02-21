@@ -1,5 +1,11 @@
 <template>
-    <el-drawer v-model="drawerVisible" :destroy-on-close="true" :close-on-click-modal="false" size="50%">
+    <el-drawer
+        v-model="drawerVisible"
+        :destroy-on-close="true"
+        :close-on-click-modal="false"
+        :close-on-press-escape="false"
+        size="50%"
+    >
         <template #header>
             <DrawerHeader :header="title" :back="handleClose" />
         </template>
@@ -10,7 +16,7 @@
                         <el-form-item :label="$t('firewall.address')" prop="address">
                             <el-input
                                 :disabled="dialogData.title === 'edit'"
-                                :autosize="{ minRows: 3, maxRows: 6 }"
+                                :rows="3"
                                 type="textarea"
                                 clearable
                                 v-model.trim="dialogData.rowData!.address"
@@ -20,8 +26,8 @@
                         </el-form-item>
                         <el-form-item :label="$t('firewall.strategy')" prop="strategy">
                             <el-radio-group v-model="dialogData.rowData!.strategy">
-                                <el-radio label="accept">{{ $t('firewall.allow') }}</el-radio>
-                                <el-radio label="drop">{{ $t('firewall.deny') }}</el-radio>
+                                <el-radio value="accept">{{ $t('firewall.allow') }}</el-radio>
+                                <el-radio value="drop">{{ $t('firewall.deny') }}</el-radio>
                             </el-radio-group>
                         </el-form-item>
                         <el-form-item :label="$t('commons.table.description')" prop="description">
@@ -50,7 +56,7 @@ import DrawerHeader from '@/components/drawer-header/index.vue';
 import { MsgSuccess } from '@/utils/message';
 import { Host } from '@/api/interface/host';
 import { operateIPRule, updateAddrRule } from '@/api/modules/host';
-import { checkCidr, checkIpV4V6, deepCopy } from '@/utils/util';
+import { checkCidr, checkCidrV6, checkIpV4V6, deepCopy } from '@/utils/util';
 
 const loading = ref();
 const oldRule = ref<Host.RuleIP>();
@@ -89,8 +95,14 @@ function checkAddress(rule: any, value: any, callback: any) {
     let addrs = dialogData.value.rowData.address.split(',');
     for (const item of addrs) {
         if (item.indexOf('/') !== -1) {
-            if (checkCidr(item)) {
-                return callback(new Error(i18n.global.t('firewall.addressFormatError')));
+            if (item.indexOf(':') !== -1) {
+                if (checkCidrV6(item)) {
+                    return callback(new Error(i18n.global.t('firewall.addressFormatError')));
+                }
+            } else {
+                if (checkCidr(item)) {
+                    return callback(new Error(i18n.global.t('firewall.addressFormatError')));
+                }
             }
         } else {
             if (checkIpV4V6(item)) {

@@ -15,6 +15,7 @@ export namespace Runtime {
         status: string;
         codeDir: string;
         port: number;
+        appID: number;
     }
 
     export interface RuntimeReq extends ReqPage {
@@ -37,6 +38,7 @@ export namespace Runtime {
         appID: number;
         source?: string;
         path?: string;
+        exposedPorts?: ExposedPort[];
     }
 
     export interface RuntimeCreate {
@@ -53,6 +55,12 @@ export namespace Runtime {
         source?: string;
         codeDir?: string;
         port?: number;
+        exposedPorts?: ExposedPort[];
+    }
+
+    export interface ExposedPort {
+        hostPort: number;
+        containerPort: number;
     }
 
     export interface RuntimeUpdate {
@@ -88,5 +96,30 @@ export namespace Runtime {
         Operate?: string;
         Module?: string;
         PkgManager?: string;
+    }
+
+    export interface PHPExtensions extends CommonModel {
+        id: number;
+        name: string;
+        extensions: string;
+    }
+
+    export interface PHPExtensionsList extends ReqPage {
+        all: boolean;
+    }
+
+    export interface PHPExtensionsCreate {
+        name: string;
+        extensions: string;
+    }
+
+    export interface PHPExtensionsUpdate {
+        id: number;
+        name: string;
+        extensions: string;
+    }
+
+    export interface PHPExtensionsDelete {
+        id: number;
     }
 }

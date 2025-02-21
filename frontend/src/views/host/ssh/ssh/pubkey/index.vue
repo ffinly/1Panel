@@ -5,6 +5,7 @@
             :destroy-on-close="true"
             @close="handleClose"
             :close-on-click-modal="false"
+            :close-on-press-escape="false"
             size="30%"
         >
             <template #header>
@@ -36,11 +37,7 @@
                         </el-form-item>
 
                         <el-form-item :label="$t('ssh.key')" prop="primaryKey" v-if="form.encryptionMode">
-                            <el-input
-                                v-model="form.primaryKey"
-                                :autosize="{ minRows: 5, maxRows: 10 }"
-                                type="textarea"
-                            />
+                            <el-input v-model="form.primaryKey" :rows="5" type="textarea" />
                             <div v-if="form.primaryKey">
                                 <el-button icon="CopyDocument" class="marginTop" @click="onCopy(form.primaryKey)">
                                     {{ $t('file.copy') }}
@@ -68,13 +65,11 @@
 import { generateSecret, loadSecret } from '@/api/modules/host';
 import { Rules } from '@/global/form-rules';
 import i18n from '@/lang';
-import { MsgError, MsgSuccess } from '@/utils/message';
-import { dateFormatForName, getRandomStr } from '@/utils/util';
-import useClipboard from 'vue-clipboard3';
+import { MsgSuccess } from '@/utils/message';
+import { copyText, dateFormatForName, getRandomStr } from '@/utils/util';
 import { FormInstance } from 'element-plus';
 import DrawerHeader from '@/components/drawer-header/index.vue';
 import { reactive, ref } from 'vue';
-const { toClipboard } = useClipboard();
 
 const loading = ref();
 const drawerVisible = ref();
@@ -118,12 +113,7 @@ const onLoadSecret = async () => {
 };
 
 const onCopy = async (str: string) => {
-    try {
-        await toClipboard(str);
-        MsgSuccess(i18n.global.t('commons.msg.copySuccess'));
-    } catch (e) {
-        MsgError(i18n.global.t('commons.msg.copyFailed'));
-    }
+    copyText(str);
 };
 
 const onGenerate = async (formEl: FormInstance | undefined) => {

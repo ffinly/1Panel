@@ -6,6 +6,10 @@ import (
 	"os"
 	"path"
 
+	"github.com/1Panel-dev/1Panel/backend/utils/postgresql"
+	pgclient "github.com/1Panel-dev/1Panel/backend/utils/postgresql/client"
+	redisclient "github.com/1Panel-dev/1Panel/backend/utils/redis"
+
 	"github.com/1Panel-dev/1Panel/backend/app/dto"
 	"github.com/1Panel-dev/1Panel/backend/buserr"
 	"github.com/1Panel-dev/1Panel/backend/constant"
@@ -28,6 +32,7 @@ type IDatabaseService interface {
 	DeleteCheck(id uint) ([]string, error)
 	Delete(req dto.DatabaseDelete) error
 	List(dbType string) ([]dto.DatabaseOption, error)
+	LoadItems(dbType string) ([]dto.DatabaseItem, error)
 }
 
 func NewIDatabaseService() IDatabaseService {
@@ -38,6 +43,7 @@ func (u *DatabaseService) SearchWithPage(search dto.DatabaseSearch) (int64, inte
 	total, dbs, err := databaseRepo.Page(search.Page, search.PageSize,
 		databaseRepo.WithTypeList(search.Type),
 		commonRepo.WithLikeName(search.Info),
+		commonRepo.WithOrderRuleBy(search.OrderBy, search.Order),
 		databaseRepo.WithoutByFrom("local"),
 	)
 	var datas []dto.DatabaseInfo
@@ -65,6 +71,9 @@ func (u *DatabaseService) Get(name string) (dto.DatabaseInfo, error) {
 
 func (u *DatabaseService) List(dbType string) ([]dto.DatabaseOption, error) {
 	dbs, err := databaseRepo.GetList(databaseRepo.WithTypeList(dbType))
+	if err != nil {
+		return nil, err
+	}
 	var datas []dto.DatabaseOption
 	for _, db := range dbs {
 		var item dto.DatabaseOption
@@ -77,18 +86,73 @@ func (u *DatabaseService) List(dbType string) ([]dto.DatabaseOption, error) {
 	return datas, err
 }
 
-func (u *DatabaseService) CheckDatabase(req dto.DatabaseCreate) bool {
-	if _, err := mysql.NewMysqlClient(client.DBInfo{
-		From:     "remote",
-		Address:  req.Address,
-		Port:     req.Port,
-		Username: req.Username,
-		Password: req.Password,
-		Timeout:  6,
-	}); err != nil {
-		return false
+func (u *DatabaseService) LoadItems(dbType string) ([]dto.DatabaseItem, error) {
+	dbs, err := databaseRepo.GetList(databaseRepo.WithTypeList(dbType))
+	var datas []dto.DatabaseItem
+	for _, db := range dbs {
+		if dbType == "postgresql" {
+			items, _ := postgresqlRepo.List(postgresqlRepo.WithByPostgresqlName(db.Name))
+			for _, item := range items {
+				var dItem dto.DatabaseItem
+				if err := copier.Copy(&dItem, &item); err != nil {
+					continue
+				}
+				dItem.Database = db.Name
+				datas = append(datas, dItem)
+			}
+		} else {
+			items, _ := mysqlRepo.List(mysqlRepo.WithByMysqlName(db.Name))
+			for _, item := range items {
+				var dItem dto.DatabaseItem
+				if err := copier.Copy(&dItem, &item); err != nil {
+					continue
+				}
+				dItem.Database = db.Name
+				datas = append(datas, dItem)
+			}
+		}
 	}
-	return true
+	return datas, err
+}
+
+func (u *DatabaseService) CheckDatabase(req dto.DatabaseCreate) bool {
+	switch req.Type {
+	case constant.AppPostgresql:
+		_, err := postgresql.NewPostgresqlClient(pgclient.DBInfo{
+			From:     "remote",
+			Address:  req.Address,
+			Port:     req.Port,
+			Username: req.Username,
+			Password: req.Password,
+			Timeout:  6,
+		})
+		return err == nil
+	case constant.AppRedis:
+		_, err := redisclient.NewRedisClient(redisclient.DBInfo{
+			Address:  req.Address,
+			Port:     req.Port,
+			Password: req.Password,
+		})
+		return err == nil
+	case "mysql", "mariadb":
+		_, err := mysql.NewMysqlClient(client.DBInfo{
+			From:     "remote",
+			Address:  req.Address,
+			Port:     req.Port,
+			Username: req.Username,
+			Password: req.Password,
+
+			SSL:        req.SSL,
+			RootCert:   req.RootCert,
+			ClientKey:  req.ClientKey,
+			ClientCert: req.ClientCert,
+			SkipVerify: req.SkipVerify,
+			Timeout:    6,
+		})
+		return err == nil
+	}
+
+	return false
 }
 
 func (u *DatabaseService) Create(req dto.DatabaseCreate) error {
@@ -99,16 +163,47 @@ func (u *DatabaseService) Create(req dto.DatabaseCreate) error {
 		}
 		return constant.ErrRecordExist
 	}
-	if _, err := mysql.NewMysqlClient(client.DBInfo{
-		From:     "remote",
-		Address:  req.Address,
-		Port:     req.Port,
-		Username: req.Username,
-		Password: req.Password,
-		Timeout:  6,
-	}); err != nil {
-		return err
+	switch req.Type {
+	case constant.AppPostgresql:
+		if _, err := postgresql.NewPostgresqlClient(pgclient.DBInfo{
+			From:     "remote",
+			Address:  req.Address,
+			Port:     req.Port,
+			Username: req.Username,
+			Password: req.Password,
+			Timeout:  6,
+		}); err != nil {
+			return err
+		}
+	case constant.AppRedis:
+		if _, err := redisclient.NewRedisClient(redisclient.DBInfo{
+			Address:  req.Address,
+			Port:     req.Port,
+			Password: req.Password,
+		}); err != nil {
+			return err
+		}
+	case "mysql", "mariadb":
+		if _, err := mysql.NewMysqlClient(client.DBInfo{
+			From:     "remote",
+			Address:  req.Address,
+			Port:     req.Port,
+			Username: req.Username,
+			Password: req.Password,
+
+			SSL:        req.SSL,
+			RootCert:   req.RootCert,
+			ClientKey:  req.ClientKey,
+			ClientCert: req.ClientCert,
+			SkipVerify: req.SkipVerify,
+			Timeout:    6,
+		}); err != nil {
+			return err
+		}
+	default:
+		return errors.New("database type not supported")
 	}
+
 	if err := copier.Copy(&db, &req); err != nil {
 		return errors.WithMessage(constant.ErrStructTransform, err.Error())
 	}
@@ -158,23 +253,59 @@ func (u *DatabaseService) Delete(req dto.DatabaseDelete) error {
 		return err
 	}
 	if db.From != "local" {
-		if err := mysqlRepo.Delete(context.Background(), mysqlRepo.WithByMysqlName(db.Name)); err != nil && !req.ForceDelete {
-			return err
+		if db.Type == "mysql" || db.Type == "mariadb" {
+			if err := mysqlRepo.Delete(context.Background(), mysqlRepo.WithByMysqlName(db.Name)); err != nil && !req.ForceDelete {
+				return err
+			}
+		} else {
+			if err := postgresqlRepo.Delete(context.Background(), postgresqlRepo.WithByPostgresqlName(db.Name)); err != nil && !req.ForceDelete {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
 func (u *DatabaseService) Update(req dto.DatabaseUpdate) error {
-	if _, err := mysql.NewMysqlClient(client.DBInfo{
-		From:     "remote",
-		Address:  req.Address,
-		Port:     req.Port,
-		Username: req.Username,
-		Password: req.Password,
-		Timeout:  300,
-	}); err != nil {
-		return err
+	switch req.Type {
+	case constant.AppPostgresql:
+		if _, err := postgresql.NewPostgresqlClient(pgclient.DBInfo{
+			From:     "remote",
+			Address:  req.Address,
+			Port:     req.Port,
+			Username: req.Username,
+			Password: req.Password,
+			Timeout:  300,
+		}); err != nil {
+			return err
+		}
+	case constant.AppRedis:
+		if _, err := redisclient.NewRedisClient(redisclient.DBInfo{
+			Address:  req.Address,
+			Port:     req.Port,
+			Password: req.Password,
+		}); err != nil {
+			return err
+		}
+	case "mysql", "mariadb":
+		if _, err := mysql.NewMysqlClient(client.DBInfo{
+			From:     "remote",
+			Address:  req.Address,
+			Port:     req.Port,
+			Username: req.Username,
+			Password: req.Password,
+
+			SSL:        req.SSL,
+			RootCert:   req.RootCert,
+			ClientKey:  req.ClientKey,
+			ClientCert: req.ClientCert,
+			SkipVerify: req.SkipVerify,
+			Timeout:    300,
+		}); err != nil {
+			return err
+		}
+	default:
+		return errors.New("database type not supported")
 	}
 
 	pass, err := encrypt.StringEncrypt(req.Password)
@@ -190,5 +321,10 @@ func (u *DatabaseService) Update(req dto.DatabaseUpdate) error {
 	upMap["username"] = req.Username
 	upMap["password"] = pass
 	upMap["description"] = req.Description
+	upMap["ssl"] = req.SSL
+	upMap["client_key"] = req.ClientKey
+	upMap["client_cert"] = req.ClientCert
+	upMap["root_cert"] = req.RootCert
+	upMap["skip_verify"] = req.SkipVerify
 	return databaseRepo.Update(req.ID, upMap)
 }

@@ -21,6 +21,9 @@ export const updateContainer = (params: Container.ContainerHelper) => {
 export const upgradeContainer = (name: string, image: string, forcePull: boolean) => {
     return http.post(`/containers/upgrade`, { name: name, image: image, forcePull: forcePull }, TimeoutEnum.T_10M);
 };
+export const commitContainer = (params: Container.ContainerCommit) => {
+    return http.post(`/containers/commit`, params);
+};
 export const loadContainerInfo = (name: string) => {
     return http.post<Container.ContainerHelper>(`/containers/info`, { name: name });
 };
@@ -36,8 +39,11 @@ export const containerListStats = () => {
 export const containerStats = (id: string) => {
     return http.get<Container.ContainerStats>(`/containers/stats/${id}`);
 };
+export const containerRename = (params: Container.ContainerRename) => {
+    return http.post(`/containers/rename`, params);
+};
 export const containerOperator = (params: Container.ContainerOperate) => {
-    return http.post(`/containers/operate`, params);
+    return http.post(`/containers/operate`, params, TimeoutEnum.T_60S);
 };
 export const containerPrune = (params: Container.ContainerPrune) => {
     return http.post<Container.ContainerPruneReport>(`/containers/prune`, params);
@@ -46,9 +52,19 @@ export const inspect = (params: Container.ContainerInspect) => {
     return http.post<string>(`/containers/inspect`, params);
 };
 
+export const DownloadFile = (params: Container.ContainerLogInfo) => {
+    return http.download<BlobPart>('/containers/download/log', params, {
+        responseType: 'blob',
+        timeout: TimeoutEnum.T_40S,
+    });
+};
+
 // image
 export const searchImage = (params: SearchWithPage) => {
     return http.post<ResPage<Container.ImageInfo>>(`/containers/image/search`, params);
+};
+export const listAllImage = () => {
+    return http.get<Array<Container.ImageInfo>>(`/containers/image/all`);
 };
 export const listImage = () => {
     return http.get<Array<Container.Options>>(`/containers/image`);
@@ -150,7 +166,7 @@ export const upCompose = (params: Container.ComposeCreate) => {
 export const testCompose = (params: Container.ComposeCreate) => {
     return http.post<boolean>(`/containers/compose/test`, params);
 };
-export const composeOperator = (params: Container.ComposeOpration) => {
+export const composeOperator = (params: Container.ComposeOperation) => {
     return http.post(`/containers/compose/operate`, params);
 };
 export const composeUpdate = (params: Container.ComposeUpdate) => {
@@ -175,6 +191,13 @@ export const updateDaemonJson = (key: string, value: string) => {
 };
 export const updateLogOption = (maxSize: string, maxFile: string) => {
     return http.post(`/containers/logoption/update`, { logMaxSize: maxSize, logMaxFile: maxFile }, TimeoutEnum.T_60S);
+};
+export const updateIpv6Option = (fixedCidrV6: string, ip6Tables: boolean, experimental: boolean) => {
+    return http.post(
+        `/containers/ipv6option/update`,
+        { fixedCidrV6: fixedCidrV6, ip6Tables: ip6Tables, experimental: experimental },
+        TimeoutEnum.T_60S,
+    );
 };
 export const updateDaemonJsonByfile = (params: Container.DaemonJsonUpdateByFile) => {
     return http.post(`/containers/daemonjson/update/byfile`, params);

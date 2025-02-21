@@ -5,15 +5,16 @@
             :destroy-on-close="true"
             @close="handleClose"
             :close-on-click-modal="false"
+            :close-on-press-escape="false"
             size="30%"
         >
             <template #header>
-                <DrawerHeader :header="$t('commons.table.port')" :back="handleClose" />
+                <DrawerHeader :header="$t('ssh.port')" :back="handleClose" />
             </template>
             <el-form ref="formRef" label-position="top" :model="form" @submit.prevent v-loading="loading">
                 <el-row type="flex" justify="center">
                     <el-col :span="22">
-                        <el-form-item :label="$t('commons.table.port')" prop="port" :rules="Rules.port">
+                        <el-form-item :label="$t('ssh.port')" prop="port" :rules="Rules.port">
                             <el-input clearable v-model.number="form.port" />
                         </el-form-item>
                     </el-col>
@@ -46,6 +47,7 @@ interface DialogProps {
 }
 const drawerVisible = ref();
 const loading = ref();
+const oldPort = ref();
 
 const form = reactive({
     port: 22,
@@ -55,6 +57,7 @@ const formRef = ref<FormInstance>();
 
 const acceptParams = (params: DialogProps): void => {
     form.port = params.port;
+    oldPort.value = params.port;
     drawerVisible.value = true;
 };
 
@@ -72,8 +75,13 @@ const onSave = async (formEl: FormInstance | undefined) => {
             },
         )
             .then(async () => {
+                let params = {
+                    key: 'Port',
+                    oldValue: oldPort.value + '',
+                    newValue: form.port + '',
+                };
                 loading.value = true;
-                await updateSSH('Port', form.port + '')
+                await updateSSH(params)
                     .then(() => {
                         loading.value = false;
                         handleClose();

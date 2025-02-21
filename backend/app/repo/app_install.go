@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/1Panel-dev/1Panel/backend/constant"
+
 	"gorm.io/gorm/clause"
 
 	"github.com/1Panel-dev/1Panel/backend/app/model"
@@ -159,6 +161,7 @@ func (a *AppInstallRepo) BatchUpdateBy(maps map[string]interface{}, opts ...DBOp
 type RootInfo struct {
 	ID            uint   `json:"id"`
 	Name          string `json:"name"`
+	Status        string `json:"status"`
 	Port          int64  `json:"port"`
 	HttpsPort     int64  `json:"httpsPort"`
 	UserName      string `json:"userName"`
@@ -170,6 +173,7 @@ type RootInfo struct {
 	Env           string `json:"env"`
 	Key           string `json:"key"`
 	Version       string `json:"version"`
+	AppPath       string `json:"app_path"`
 }
 
 func (a *AppInstallRepo) LoadBaseInfo(key string, name string) (*RootInfo, error) {
@@ -205,7 +209,7 @@ func (a *AppInstallRepo) LoadBaseInfo(key string, name string) (*RootInfo, error
 		if ok {
 			info.Password = password
 		}
-	case "mongodb", "postgresql":
+	case "mongodb", constant.AppPostgresql:
 		user, ok := envMap["PANEL_DB_ROOT_USER"].(string)
 		if ok {
 			info.UserName = user
@@ -230,5 +234,8 @@ func (a *AppInstallRepo) LoadBaseInfo(key string, name string) (*RootInfo, error
 	info.Param = appInstall.Param
 	info.Version = appInstall.Version
 	info.Key = app.Key
+	appInstall.App = app
+	info.AppPath = appInstall.GetAppPath()
+	info.Status = appInstall.Status
 	return &info, nil
 }

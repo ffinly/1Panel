@@ -1,77 +1,111 @@
 <template>
-    <el-drawer v-model="dialogVisible" :destroy-on-close="true" :close-on-click-modal="false" size="30%">
+    <el-drawer
+        v-model="dialogVisible"
+        :destroy-on-close="true"
+        :close-on-click-modal="false"
+        :close-on-press-escape="false"
+        size="30%"
+    >
         <template #header>
             <DrawerHeader :header="$t('database.databaseConnInfo')" :back="handleClose" />
         </template>
         <el-form @submit.prevent v-loading="loading" ref="formRef" :model="form" label-position="top">
-            <el-row type="flex" justify="center" v-if="form.from === 'local'">
+            <el-row type="flex" justify="center">
                 <el-col :span="22">
-                    <el-form-item :label="$t('database.containerConn')">
-                        <el-tag>
-                            {{ form.serviceName + ':3306' }}
-                        </el-tag>
-                        <el-button @click="onCopy(form.serviceName + ':3306')" icon="DocumentCopy" link></el-button>
+                    <el-form-item :label="$t('database.containerConn')" v-if="form.from === 'local'">
+                        <el-card class="mini-border-card">
+                            <el-descriptions :column="1">
+                                <el-descriptions-item :label="$t('database.connAddress')">
+                                    <el-tooltip
+                                        v-if="loadMysqlInfo(true).length > 48"
+                                        :content="loadMysqlInfo(true)"
+                                        placement="top"
+                                    >
+                                        {{ loadMysqlInfo(true).substring(0, 48) }}...
+                                    </el-tooltip>
+                                    <span else>
+                                        {{ loadMysqlInfo(true) }}
+                                    </span>
+                                    <CopyButton :content="loadMysqlInfo(true)" type="icon" />
+                                </el-descriptions-item>
+                                <el-descriptions-item :label="$t('database.connPort')">
+                                    3306
+                                    <CopyButton content="3306" type="icon" />
+                                </el-descriptions-item>
+                            </el-descriptions>
+                        </el-card>
                         <span class="input-help">
                             {{ $t('database.containerConnHelper') }}
                         </span>
                     </el-form-item>
                     <el-form-item :label="$t('database.remoteConn')">
-                        <el-tooltip v-if="loadConnInfo(true).length > 48" :content="loadConnInfo(true)" placement="top">
-                            <el-tag>{{ loadConnInfo(true).substring(0, 48) }}...</el-tag>
-                        </el-tooltip>
-                        <el-tag v-else>{{ loadConnInfo(true) }}</el-tag>
-                        <el-button
-                            @click="onCopy(form.systemIP + ':' + form.port)"
-                            icon="DocumentCopy"
-                            link
-                        ></el-button>
-                        <span class="input-help">{{ $t('database.remoteConnHelper2') }}</span>
+                        <el-card class="mini-border-card">
+                            <el-descriptions :column="1">
+                                <el-descriptions-item :label="$t('database.connAddress')">
+                                    <el-tooltip
+                                        v-if="loadMysqlInfo(false).length > 48"
+                                        :content="loadMysqlInfo(false)"
+                                        placement="top"
+                                    >
+                                        {{ loadMysqlInfo(false).substring(0, 48) }}...
+                                    </el-tooltip>
+                                    <span else>
+                                        {{ loadMysqlInfo(false) }}
+                                    </span>
+                                    <CopyButton :content="loadMysqlInfo(false)" type="icon" />
+                                </el-descriptions-item>
+                                <el-descriptions-item :label="$t('database.connPort')">
+                                    {{ form.port }}
+                                    <CopyButton :content="form.port + ''" type="icon" />
+                                </el-descriptions-item>
+                            </el-descriptions>
+                        </el-card>
+                        <span v-if="form.from === 'local'" class="input-help">
+                            {{ $t('database.remoteConnHelper2') }}
+                        </span>
                     </el-form-item>
-
                     <el-divider border-style="dashed" />
 
-                    <el-form-item :label="$t('database.remoteAccess')" prop="privilege">
-                        <el-switch v-model="form.privilege" @change="onSaveAccess" />
-                        <span class="input-help">{{ $t('database.remoteConnHelper') }}</span>
-                    </el-form-item>
-                    <el-form-item :label="$t('database.rootPassword')" :rules="Rules.paramComplexity" prop="password">
-                        <el-input type="password" show-password clearable v-model="form.password">
-                            <template #append>
-                                <el-button @click="onCopy(form.password)">{{ $t('commons.button.copy') }}</el-button>
-                                <el-divider direction="vertical" />
+                    <div v-if="form.from === 'local'">
+                        <el-form-item :label="$t('database.remoteAccess')" prop="privilege">
+                            <el-switch
+                                v-model="form.privilege"
+                                :disabled="form.status !== 'Running'"
+                                @change="onSaveAccess"
+                            />
+                            <span class="input-help">{{ $t('database.remoteConnHelper') }}</span>
+                        </el-form-item>
+                        <el-form-item
+                            :label="$t('database.rootPassword')"
+                            :rules="Rules.paramComplexity"
+                            prop="password"
+                        >
+                            <el-input
+                                style="width: calc(100% - 205px)"
+                                type="password"
+                                show-password
+                                clearable
+                                v-model="form.password"
+                            />
+                            <el-button-group>
+                                <CopyButton class="copy_button" :content="form.password" />
                                 <el-button @click="random">
                                     {{ $t('commons.button.random') }}
                                 </el-button>
-                            </template>
-                        </el-input>
-                    </el-form-item>
-                </el-col>
-            </el-row>
-            <el-row type="flex" justify="center" v-if="form.from !== 'local'">
-                <el-col :span="22">
-                    <el-form-item :label="$t('database.remoteConn')">
-                        <el-tooltip
-                            v-if="loadConnInfo(false).length > 48"
-                            :content="loadConnInfo(false)"
-                            placement="top"
-                        >
-                            <el-tag>{{ loadConnInfo(false).substring(0, 48) }}...</el-tag>
-                        </el-tooltip>
-                        <el-tag v-else>{{ loadConnInfo(false) }}</el-tag>
-                        <el-button
-                            @click="onCopy(form.remoteIP + ':' + form.port)"
-                            icon="DocumentCopy"
-                            link
-                        ></el-button>
-                    </el-form-item>
-                    <el-form-item :label="$t('commons.login.username')">
-                        <el-tag>{{ form.username }}</el-tag>
-                        <el-button @click="onCopy(form.username)" icon="DocumentCopy" link></el-button>
-                    </el-form-item>
-                    <el-form-item :label="$t('commons.login.password')">
-                        <el-tag>{{ form.password }}</el-tag>
-                        <el-button @click="onCopy(form.password)" icon="DocumentCopy" link></el-button>
-                    </el-form-item>
+                            </el-button-group>
+                        </el-form-item>
+                    </div>
+
+                    <div v-if="form.from !== 'local'">
+                        <el-form-item :label="$t('commons.login.username')">
+                            <el-tag>{{ form.username }}</el-tag>
+                            <CopyButton :content="form.username" type="icon" />
+                        </el-form-item>
+                        <el-form-item :label="$t('commons.login.password')">
+                            <el-tag>{{ form.password }}</el-tag>
+                            <CopyButton :content="form.password" type="icon" />
+                        </el-form-item>
+                    </div>
                 </el-col>
             </el-row>
         </el-form>
@@ -84,7 +118,7 @@
                 <el-button :disabled="loading" @click="dialogVisible = false">
                     {{ $t('commons.button.cancel') }}
                 </el-button>
-                <el-button :disabled="loading" type="primary" @click="onSave(formRef)">
+                <el-button :disabled="loading || form.status !== 'Running'" type="primary" @click="onSave(formRef)">
                     {{ $t('commons.button.confirm') }}
                 </el-button>
             </span>
@@ -101,19 +135,19 @@ import { getDatabase, loadRemoteAccess, updateMysqlAccess, updateMysqlPassword }
 import ConfirmDialog from '@/components/confirm-dialog/index.vue';
 import { GetAppConnInfo } from '@/api/modules/app';
 import DrawerHeader from '@/components/drawer-header/index.vue';
-import { MsgError, MsgSuccess } from '@/utils/message';
+import { MsgSuccess } from '@/utils/message';
 import { getRandomStr } from '@/utils/util';
 import { getSettingInfo } from '@/api/modules/setting';
-import useClipboard from 'vue-clipboard3';
-const { toClipboard } = useClipboard();
 
 const loading = ref(false);
 
 const dialogVisible = ref(false);
 const form = reactive({
+    status: '',
     systemIP: '',
     password: '',
     serviceName: '',
+    containerName: '',
     privilege: false,
     port: 0,
 
@@ -146,23 +180,16 @@ const acceptParams = (param: DialogProps): void => {
     dialogVisible.value = true;
 };
 
-function loadConnInfo(isLocal: boolean) {
-    let ip = isLocal ? form.systemIP : form.remoteIP;
-    let info = ip + ':' + form.port;
-    return info;
+function loadMysqlInfo(isContainer: boolean) {
+    if (isContainer) {
+        return form.from === 'local' ? form.containerName : form.systemIP;
+    } else {
+        return form.from === 'local' ? form.systemIP : form.remoteIP;
+    }
 }
 
 const random = async () => {
     form.password = getRandomStr(16);
-};
-
-const onCopy = async (value: string) => {
-    try {
-        await toClipboard(value);
-        MsgSuccess(i18n.global.t('commons.msg.copySuccess'));
-    } catch (e) {
-        MsgError(i18n.global.t('commons.msg.copyFailed'));
-    }
 };
 
 const handleClose = () => {
@@ -184,9 +211,11 @@ const loadSystemIP = async () => {
 const loadPassword = async () => {
     if (form.from === 'local') {
         const res = await GetAppConnInfo(form.type, form.database);
+        form.status = res.data.status;
         form.password = res.data.password || '';
         form.port = res.data.port || 3306;
         form.serviceName = res.data.serviceName || '';
+        form.containerName = res.data.containerName || '';
         loadSystemIP();
         return;
     }
@@ -264,3 +293,14 @@ defineExpose({
     acceptParams,
 });
 </script>
+
+<style lang="scss" scoped>
+.copy_button {
+    border-radius: 0px;
+    border-left-width: 0px;
+}
+:deep(.el-input__wrapper) {
+    border-top-right-radius: 0px;
+    border-bottom-right-radius: 0px;
+}
+</style>

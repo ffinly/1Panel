@@ -1,5 +1,11 @@
 <template>
-    <el-drawer v-model="drawerVisible" :destroy-on-close="true" :close-on-click-modal="false" size="50%">
+    <el-drawer
+        v-model="drawerVisible"
+        :destroy-on-close="true"
+        :close-on-click-modal="false"
+        :close-on-press-escape="false"
+        size="50%"
+    >
         <template #header>
             <DrawerHeader
                 :hideResource="dialogData.title === 'create'"
@@ -21,18 +27,21 @@
                     </el-form-item>
                     <el-form-item :label="$t('commons.table.type')" prop="type">
                         <el-radio-group v-model="dialogData.rowData!.type" @change="changeType">
-                            <el-radio-button label="mysql">MySQL</el-radio-button>
-                            <el-radio-button label="mariadb">MariaDB</el-radio-button>
+                            <el-radio-button value="mysql">MySQL</el-radio-button>
+                            <el-radio-button value="mariadb">MariaDB</el-radio-button>
                         </el-radio-group>
                     </el-form-item>
                     <el-form-item :label="$t('database.version')" prop="version">
                         <el-radio-group v-model="dialogData.rowData!.version" @change="isOK = false">
                             <div v-if="dialogData.rowData!.type === 'mysql'">
-                                <el-radio label="8.x" />
-                                <el-radio label="5.7" />
-                                <el-radio label="5.6" />
+                                <el-radio label="8.x" value="8.x" />
+                                <el-radio label="5.7" value="5.7" />
+                                <el-radio label="5.6" value="5.6" />
                             </div>
-                            <el-radio v-else label="10.x" />
+                            <div v-else>
+                                <el-radio label="10.x" value="10.x" />
+                                <el-radio label="11.x" value="11.x" />
+                            </div>
                         </el-radio-group>
                     </el-form-item>
                     <el-form-item :label="$t('database.address')" prop="address">
@@ -54,6 +63,53 @@
                             v-model.trim="dialogData.rowData!.password"
                         />
                     </el-form-item>
+                    <el-form-item>
+                        <el-checkbox
+                            @change="isOK = false"
+                            v-model="dialogData.rowData!.ssl"
+                            :label="$t('database.ssl')"
+                        />
+                    </el-form-item>
+                    <div v-if="dialogData.rowData!.ssl">
+                        <el-form-item>
+                            <el-checkbox
+                                @change="isOK = false"
+                                v-model="dialogData.rowData!.hasCA"
+                                :label="$t('database.hasCA')"
+                            />
+                        </el-form-item>
+                        <el-form-item>
+                            <el-checkbox
+                                @change="isOK = false"
+                                v-model="dialogData.rowData!.skipVerify"
+                                :label="$t('database.skipVerify')"
+                            />
+                        </el-form-item>
+                        <el-form-item :label="$t('database.clientKey')" prop="clientKey">
+                            <el-input
+                                type="textarea"
+                                @change="isOK = false"
+                                clearable
+                                v-model="dialogData.rowData!.clientKey"
+                            />
+                        </el-form-item>
+                        <el-form-item :label="$t('database.clientCert')" prop="clientCert">
+                            <el-input
+                                type="textarea"
+                                @change="isOK = false"
+                                clearable
+                                v-model="dialogData.rowData!.clientCert"
+                            />
+                        </el-form-item>
+                        <el-form-item v-if="dialogData.rowData!.hasCA" :label="$t('database.caCert')" prop="rootCert">
+                            <el-input
+                                type="textarea"
+                                @change="isOK = false"
+                                clearable
+                                v-model="dialogData.rowData!.rootCert"
+                            />
+                        </el-form-item>
+                    </div>
                     <el-form-item :label="$t('commons.table.description')" prop="description">
                         <el-input clearable v-model.trim="dialogData.rowData!.description" />
                     </el-form-item>
@@ -111,6 +167,7 @@ const acceptParams = (params: DialogProps): void => {
     if (dialogData.value.rowData.version.startsWith('10.')) {
         dialogData.value.rowData.version = '10.x';
     }
+    dialogData.value.rowData.hasCA = dialogData.value.rowData.rootCert?.length !== 0;
     title.value = i18n.global.t('database.' + dialogData.value.title + 'RemoteDB');
     drawerVisible.value = true;
 };
@@ -121,10 +178,10 @@ const handleClose = () => {
 };
 
 const rules = reactive({
-    name: [Rules.requiredInput],
+    name: [Rules.simpleName, Rules.noSpace],
     type: [Rules.requiredSelect],
     version: [Rules.requiredSelect],
-    address: [Rules.host],
+    address: [Rules.ipV4V6OrDomain],
     port: [Rules.port],
     username: [Rules.requiredInput],
     password: [Rules.requiredInput],
@@ -144,6 +201,7 @@ const onSubmit = async (formEl: FormInstance | undefined, operation: string) => 
         if (!valid) return;
         dialogData.value.rowData.from = 'remote';
         loading.value = true;
+        dialogData.value.rowData.rootCert = dialogData.value.rowData.hasCA ? dialogData.value.rowData.rootCert : '';
         if (operation === 'check') {
             await checkDatabase(dialogData.value.rowData)
                 .then((res) => {

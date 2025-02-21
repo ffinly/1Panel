@@ -2,9 +2,7 @@ package dto
 
 type SearchWithPage struct {
 	PageInfo
-	Info    string `json:"info"`
-	OrderBy string `json:"orderBy"`
-	Order   string `json:"order"`
+	Info string `json:"info"`
 }
 
 type PageInfo struct {
@@ -41,7 +39,21 @@ type DeleteByName struct {
 	Name string `json:"name" validate:"required"`
 }
 
+type UpdateByFile struct {
+	File string `json:"file"`
+}
+
+type UpdateByNameAndFile struct {
+	Name string `json:"name"`
+	File string `json:"file"`
+}
+
 type OperationWithNameAndType struct {
-	Name string `json:"name" validate:"required"`
+	Name string `json:"name"`
 	Type string `json:"type" validate:"required"`
+}
+
+type ForceDelete struct {
+	IDs         []uint `json:"ids"`
+	ForceDelete bool   `json:"forceDelete"`
 }

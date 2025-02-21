@@ -1,12 +1,18 @@
 <template>
-    <el-drawer v-model="open" :destroy-on-close="true" size="50%">
+    <el-drawer
+        v-model="open"
+        :destroy-on-close="true"
+        :close-on-click-modal="false"
+        :close-on-press-escape="false"
+        size="50%"
+    >
         <template #header>
             <DrawerHeader :header="$t('app.detail')" :back="handleClose" />
         </template>
         <div class="brief" v-loading="loadingApp">
             <div class="detail flex">
-                <div class="w-12 h-12 bg-gray-100 rounded p-1 shadow-md icon">
-                    <img :src="app.icon" alt="App Icon" class="w-full h-full rounded" />
+                <div class="w-12 h-12 rounded p-1 shadow-md icon">
+                    <img :src="app.icon" alt="App Icon" class="w-full h-full rounded" style="object-fit: contain" />
                 </div>
                 <div class="ml-4">
                     <div class="name mb-2">
@@ -14,13 +20,12 @@
                     </div>
                     <div class="description mb-4">
                         <span>
-                            {{ language == 'zh' || language == 'tw' ? app.shortDescZh : app.shortDescEn }}
+                            {{ app.description }}
                         </span>
                     </div>
                     <br />
                     <div v-if="!loadingDetail" class="mb-2">
                         <el-alert
-                            style="width: 300px"
                             v-if="!appDetail.enable"
                             :title="$t('app.limitHelper')"
                             type="warning"
@@ -28,46 +33,46 @@
                             :closable="false"
                         />
                     </div>
-                    <el-button round v-if="appDetail.enable" @click="openInstall" type="primary">
+                    <el-button
+                        round
+                        v-if="appDetail.enable && operate === 'install'"
+                        @click="openInstall"
+                        type="primary"
+                        class="brief-button"
+                    >
                         {{ $t('app.install') }}
                     </el-button>
                 </div>
             </div>
             <div class="divider"></div>
-            <div>
-                <el-row>
-                    <el-col :span="12">
-                        <div class="descriptions">
-                            <el-descriptions direction="vertical">
-                                <el-descriptions-item>
-                                    <el-link @click="toLink(app.website)">
-                                        <el-icon><OfficeBuilding /></el-icon>
-                                        <span>{{ $t('app.appOfficeWebsite') }}</span>
-                                    </el-link>
-                                </el-descriptions-item>
-                                <el-descriptions-item>
-                                    <el-link @click="toLink(app.document)">
-                                        <el-icon><Document /></el-icon>
-                                        <span>{{ $t('app.document') }}</span>
-                                    </el-link>
-                                </el-descriptions-item>
-                                <el-descriptions-item>
-                                    <el-link @click="toLink(app.github)">
-                                        <el-icon><Link /></el-icon>
-                                        <span>{{ $t('app.github') }}</span>
-                                    </el-link>
-                                </el-descriptions-item>
-                            </el-descriptions>
-                        </div>
-                    </el-col>
-                </el-row>
+            <div class="descriptions">
+                <div>
+                    <el-descriptions direction="vertical">
+                        <el-descriptions-item>
+                            <div class="icons">
+                                <el-link @click="toLink(app.website)">
+                                    <el-icon><OfficeBuilding /></el-icon>
+                                    <span>{{ $t('app.appOfficeWebsite') }}</span>
+                                </el-link>
+                            </div>
+                        </el-descriptions-item>
+                        <el-descriptions-item>
+                            <el-link @click="toLink(app.document)">
+                                <el-icon><Document /></el-icon>
+                                <span>{{ $t('app.document') }}</span>
+                            </el-link>
+                        </el-descriptions-item>
+                        <el-descriptions-item>
+                            <el-link @click="toLink(app.github)">
+                                <el-icon><Link /></el-icon>
+                                <span>{{ $t('app.github') }}</span>
+                            </el-link>
+                        </el-descriptions-item>
+                    </el-descriptions>
+                </div>
             </div>
         </div>
-        <MdEditor
-            previewOnly
-            v-model="app.readMe"
-            :theme="globalStore.$state.themeConfig.theme === 'dark' ? 'dark' : 'light'"
-        />
+        <MdEditor previewOnly v-model="app.readMe" :theme="isDarkTheme ? 'dark' : 'light'" />
     </el-drawer>
     <Install ref="installRef"></Install>
 </template>
@@ -76,13 +81,12 @@
 import { GetApp, GetAppDetail } from '@/api/modules/app';
 import MdEditor from 'md-editor-v3';
 import { ref } from 'vue';
-import { useI18n } from 'vue-i18n';
 import Install from './install/index.vue';
 import router from '@/routers';
 import { GlobalStore } from '@/store';
+import { storeToRefs } from 'pinia';
 const globalStore = GlobalStore();
-
-const language = useI18n().locale.value;
+const { isDarkTheme } = storeToRefs(globalStore);
 
 const app = ref<any>({});
 const appDetail = ref<any>({});
@@ -92,9 +96,11 @@ const loadingApp = ref(false);
 const installRef = ref();
 const open = ref(false);
 const appKey = ref();
+const operate = ref();
 
-const acceptParams = async (key: string) => {
+const acceptParams = async (key: string, op: string) => {
     appKey.value = key;
+    operate.value = op;
     open.value = true;
     getApp();
 };
@@ -133,10 +139,12 @@ const toLink = (link: string) => {
 const openInstall = () => {
     switch (app.value.type) {
         case 'php':
-            router.push({ path: '/websites/runtimes/php' });
-            break;
         case 'node':
-            router.push({ path: '/websites/runtimes/node' });
+        case 'java':
+        case 'go':
+        case 'python':
+        case 'dotnet':
+            router.push({ path: '/websites/runtimes/' + app.value.type });
             break;
         default:
             const params = {
@@ -152,13 +160,13 @@ defineExpose({
 });
 </script>
 
-<style lang="scss">
+<style lang="scss" scoped>
 .brief {
-    padding: 10px;
     .name {
         span {
             font-weight: 500;
             font-size: 18px;
+            color: var(--el-text-color-regular);
         }
     }
 
@@ -173,6 +181,7 @@ defineExpose({
     .icon {
         width: 180px;
         height: 180px;
+        background-color: #ffffff;
     }
 
     .version {
@@ -181,6 +190,13 @@ defineExpose({
 
     .descriptions {
         margin-top: 5px;
+        .icons {
+            margin-left: 20px;
+        }
     }
+}
+
+:deep(.md-editor-dark) {
+    background-color: var(--panel-main-bg-color-9);
 }
 </style>
