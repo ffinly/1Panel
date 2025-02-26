@@ -5,26 +5,16 @@
                 <back-button name="MySQL" :header="$t('database.remoteDB')" />
             </template>
             <template #toolbar>
-                <el-row>
-                    <el-col :xs="24" :sm="20" :md="20" :lg="20" :xl="20">
+                <div class="flex justify-between gap-2 flex-wrap sm:flex-row">
+                    <div class="flex flex-wrap gap-3">
                         <el-button type="primary" @click="onOpenDialog('create')">
                             {{ $t('database.createRemoteDB') }}
                         </el-button>
-                    </el-col>
-                    <el-col :xs="24" :sm="4" :md="4" :lg="4" :xl="4">
-                        <div class="search-button">
-                            <el-input
-                                v-model="searchName"
-                                clearable
-                                @clear="search()"
-                                suffix-icon="Search"
-                                @keyup.enter="search()"
-                                @change="search()"
-                                :placeholder="$t('commons.button.search')"
-                            ></el-input>
-                        </div>
-                    </el-col>
-                </el-row>
+                    </div>
+                    <div class="flex flex-wrap gap-3">
+                        <TableSearch @search="search()" v-model:searchName="searchName" />
+                    </div>
+                </div>
             </template>
             <template #main>
                 <ComplexTable :pagination-config="paginationConfig" @sort-change="search" @search="search" :data="data">
@@ -33,31 +23,31 @@
                     <el-table-column :label="$t('commons.login.username')" prop="username" />
                     <el-table-column :label="$t('commons.login.password')" prop="password">
                         <template #default="{ row }">
-                            <div>
-                                <span style="float: left; line-height: 25px" v-if="!row.showPassword">***********</span>
-                                <div style="cursor: pointer; float: left" v-if="!row.showPassword">
-                                    <el-icon
-                                        style="margin-left: 5px; margin-top: 3px"
-                                        @click="row.showPassword = true"
-                                        :size="16"
-                                    >
-                                        <View />
-                                    </el-icon>
+                            <div class="flex items-center flex-wrap">
+                                <div class="star-center">
+                                    <span v-if="!row.showPassword">**********</span>
                                 </div>
-                                <span style="float: left" v-if="row.showPassword">{{ row.password }}</span>
-                                <div style="cursor: pointer; float: left" v-if="row.showPassword">
-                                    <el-icon
-                                        style="margin-left: 5px; margin-top: 3px"
-                                        @click="row.showPassword = false"
-                                        :size="16"
-                                    >
-                                        <Hide />
-                                    </el-icon>
+                                <div>
+                                    <span v-if="row.showPassword">
+                                        {{ row.password }}
+                                    </span>
                                 </div>
-                                <div style="cursor: pointer; float: left">
-                                    <el-icon style="margin-left: 5px; margin-top: 3px" :size="16" @click="onCopy(row)">
-                                        <DocumentCopy />
-                                    </el-icon>
+                                <el-button
+                                    v-if="!row.showPassword"
+                                    link
+                                    @click="row.showPassword = true"
+                                    icon="View"
+                                    class="ml-1.5"
+                                ></el-button>
+                                <el-button
+                                    v-if="row.showPassword"
+                                    link
+                                    @click="row.showPassword = false"
+                                    icon="Hide"
+                                    class="ml-1.5"
+                                ></el-button>
+                                <div>
+                                    <CopyButton :content="row.password" type="icon" />
                                 </div>
                             </div>
                         </template>
@@ -98,10 +88,7 @@ import AppResources from '@/views/database/mysql/check/index.vue';
 import OperateDialog from '@/views/database/mysql/remote/operate/index.vue';
 import DeleteDialog from '@/views/database/mysql/remote/delete/index.vue';
 import i18n from '@/lang';
-import { MsgError, MsgSuccess } from '@/utils/message';
 import { Database } from '@/api/interface/database';
-import useClipboard from 'vue-clipboard3';
-const { toClipboard } = useClipboard();
 
 const loading = ref(false);
 
@@ -156,15 +143,6 @@ const onOpenDialog = async (
     dialogRef.value!.acceptParams(params);
 };
 
-const onCopy = async (row: any) => {
-    try {
-        await toClipboard(row.password);
-        MsgSuccess(i18n.global.t('commons.msg.copySuccess'));
-    } catch (e) {
-        MsgError(i18n.global.t('commons.msg.copyFailed'));
-    }
-};
-
 const onDelete = async (row: Database.DatabaseInfo) => {
     const res = await deleteCheckDatabase(row.id);
     if (res.data && res.data.length > 0) {
@@ -185,7 +163,7 @@ const buttons = [
         },
     },
     {
-        label: i18n.global.t('commons.button.delete'),
+        label: i18n.global.t('commons.button.unbind'),
         click: (row: Database.DatabaseInfo) => {
             onDelete(row);
         },

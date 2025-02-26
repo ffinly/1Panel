@@ -4,6 +4,7 @@
         :destroy-on-close="true"
         @close="handleClose"
         :close-on-click-modal="false"
+        :close-on-press-escape="false"
         size="50%"
     >
         <template #header>
@@ -12,7 +13,6 @@
         <el-form label-position="top" @submit.prevent>
             <el-form-item :label="$t('container.refreshTime')">
                 <el-select v-model="timeInterval" @change="changeTimer">
-                    <el-option label="1s" :value="1" />
                     <el-option label="3s" :value="3" />
                     <el-option label="5s" :value="5" />
                     <el-option label="10s" :value="10" />
@@ -161,8 +161,8 @@ const loadData = async () => {
 
     chartsOption.value['cpuChart'] = {
         title: 'CPU',
-        xDatas: timeDatas.value,
-        yDatas: [
+        xData: timeDatas.value,
+        yData: [
             {
                 name: 'CPU',
                 data: cpuDatas.value,
@@ -173,8 +173,8 @@ const loadData = async () => {
 
     chartsOption.value['memoryChart'] = {
         title: i18n.global.t('monitor.memory'),
-        xDatas: timeDatas.value,
-        yDatas: [
+        xData: timeDatas.value,
+        yData: [
             {
                 name: i18n.global.t('monitor.memory'),
                 data: memDatas.value,
@@ -189,8 +189,8 @@ const loadData = async () => {
 
     chartsOption.value['ioChart'] = {
         title: i18n.global.t('monitor.disk') + ' IO',
-        xDatas: timeDatas.value,
-        yDatas: [
+        xData: timeDatas.value,
+        yData: [
             {
                 name: i18n.global.t('monitor.read'),
                 data: ioReadDatas.value,
@@ -205,8 +205,8 @@ const loadData = async () => {
 
     chartsOption.value['networkChart'] = {
         title: i18n.global.t('monitor.network'),
-        xDatas: timeDatas.value,
-        yDatas: [
+        xData: timeDatas.value,
+        yData: [
             {
                 name: i18n.global.t('monitor.up'),
                 data: netTxDatas.value,
@@ -216,7 +216,7 @@ const loadData = async () => {
                 data: netRxDatas.value,
             },
         ],
-        formatStr: 'KB/s',
+        formatStr: 'KB',
     };
 };
 const handleClose = async () => {

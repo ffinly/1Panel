@@ -1,26 +1,13 @@
 <template>
     <div>
         <FireRouter />
-        <LayoutContent :title="$t('ssh.session')">
+        <LayoutContent :title="$t('ssh.session', 2)">
             <template #toolbar>
-                <div style="width: 100%">
-                    <el-row :gutter="20">
-                        <el-col :span="8"></el-col>
-                        <el-col :span="8"></el-col>
-                        <el-col :span="8">
-                            <div class="search-button">
-                                <el-input
-                                    v-model.trim="sshSearch.loginUser"
-                                    clearable
-                                    @clear="search()"
-                                    suffix-icon="Search"
-                                    @keyup.enter="search()"
-                                    @change="search()"
-                                    :placeholder="$t('commons.table.user')"
-                                ></el-input>
-                            </div>
-                        </el-col>
-                    </el-row>
+                <div class="flex justify-between gap-2 flex-wrap sm:flex-row">
+                    <div><!-- 占位 --></div>
+                    <div class="flex flex-wrap gap-3">
+                        <TableSearch @search="search()" v-model:searchName="sshSearch.loginUser" />
+                    </div>
                 </div>
             </template>
             <template #main>

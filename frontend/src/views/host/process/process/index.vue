@@ -1,58 +1,30 @@
 <template>
     <div>
         <FireRouter />
-        <LayoutContent :title="$t('menu.process')" v-loading="loading">
+        <LayoutContent :title="$t('menu.process', 2)" v-loading="loading">
             <template #toolbar>
-                <el-row>
-                    <el-col :span="24">
-                        <div style="width: 100%">
-                            <el-form-item style="float: right">
-                                <el-row :gutter="20">
-                                    <el-col :span="8">
-                                        <div class="search-button">
-                                            <el-input
-                                                typpe="number"
-                                                v-model.number="processSearch.pid"
-                                                clearable
-                                                @clear="search()"
-                                                suffix-icon="Search"
-                                                @keyup.enter="search()"
-                                                @change="search()"
-                                                :placeholder="$t('process.pid')"
-                                            ></el-input>
-                                        </div>
-                                    </el-col>
-                                    <el-col :span="8">
-                                        <div class="search-button">
-                                            <el-input
-                                                v-model.trim="processSearch.name"
-                                                clearable
-                                                @clear="search()"
-                                                suffix-icon="Search"
-                                                @keyup.enter="search()"
-                                                @change="search()"
-                                                :placeholder="$t('commons.table.name')"
-                                            ></el-input>
-                                        </div>
-                                    </el-col>
-                                    <el-col :span="8">
-                                        <div class="search-button">
-                                            <el-input
-                                                v-model.trim="processSearch.username"
-                                                clearable
-                                                @clear="search()"
-                                                suffix-icon="Search"
-                                                @keyup.enter="search()"
-                                                @change="search()"
-                                                :placeholder="$t('commons.table.user')"
-                                            ></el-input>
-                                        </div>
-                                    </el-col>
-                                </el-row>
-                            </el-form-item>
-                        </div>
-                    </el-col>
-                </el-row>
+                <div class="flex justify-between gap-2 flex-wrap sm:flex-row">
+                    <div><!-- 占位 --></div>
+                    <div class="flex flex-wrap gap-3">
+                        <TableSearch
+                            @search="search()"
+                            :placeholder="$t('process.pid')"
+                            v-model:searchName="processSearch.pid"
+                        />
+
+                        <TableSearch
+                            @search="search()"
+                            :placeholder="$t('commons.table.name')"
+                            v-model:searchName="processSearch.name"
+                        />
+
+                        <TableSearch
+                            @search="search()"
+                            :placeholder="$t('commons.table.user')"
+                            v-model:searchName="processSearch.username"
+                        />
+                    </div>
+                </div>
             </template>
             <template #main>
                 <ComplexTable :data="data" @sort-change="changeSort" @filter-change="changeFilter" ref="tableRef">
@@ -82,11 +54,17 @@
                     <el-table-column
                         :label="$t('process.memory')"
                         fix
+                        min-width="120"
                         prop="rssValue"
                         :formatter="memFormatter"
                         sortable
                     ></el-table-column>
-                    <el-table-column :label="$t('process.numConnections')" fix prop="numConnections"></el-table-column>
+                    <el-table-column
+                        :label="$t('process.numConnections')"
+                        fix
+                        prop="numConnections"
+                        min-width="120"
+                    ></el-table-column>
                     <el-table-column
                         :label="$t('process.status')"
                         fix
@@ -118,6 +96,8 @@
                 </ComplexTable>
             </template>
         </LayoutContent>
+
+        <OpDialog ref="opRef" @search="search" />
         <ProcessDetail ref="detailRef" />
     </div>
 </template>
@@ -128,7 +108,6 @@ import { ref, onMounted, onUnmounted, nextTick, reactive } from 'vue';
 import ProcessDetail from './detail/index.vue';
 import i18n from '@/lang';
 import { StopProcess } from '@/api/modules/process';
-import { useDeleteData } from '@/hooks/use-delete-data';
 
 interface SortStatus {
     prop: '';
@@ -147,10 +126,11 @@ const processSearch = reactive({
     username: '',
     name: '',
 });
+const opRef = ref();
 
 const buttons = [
     {
-        label: i18n.global.t('app.detail'),
+        label: i18n.global.t('process.viewDetails'),
         click: function (row: any) {
             openDetail(row);
         },
@@ -158,7 +138,7 @@ const buttons = [
     {
         label: i18n.global.t('process.stopProcess'),
         click: function (row: any) {
-            stopProcess(row.PID);
+            stopProcess(row);
         },
     },
 ];
@@ -271,16 +251,24 @@ const search = () => {
     if (isWsOpen() && !isGetData.value) {
         isGetData.value = true;
         if (typeof processSearch.pid === 'string') {
-            processSearch.pid = undefined;
+            processSearch.pid = Number(processSearch.pid);
         }
         processSocket.send(JSON.stringify(processSearch));
     }
 };
 
-const stopProcess = async (PID: number) => {
-    try {
-        await useDeleteData(StopProcess, { PID: PID }, i18n.global.t('process.stopProcessWarn', [PID]));
-    } catch (error) {}
+const stopProcess = async (row: any) => {
+    opRef.value.acceptParams({
+        title: i18n.global.t('process.stopProcess'),
+        names: [row.name],
+        msg: i18n.global.t('commons.msg.operatorHelper', [
+            i18n.global.t('menu.process'),
+            i18n.global.t('process.stopProcess'),
+        ]),
+        api: StopProcess,
+        params: { PID: row.PID },
+        successMsg: i18n.global.t('commons.msg.operationSuccess'),
+    });
 };
 
 onMounted(() => {

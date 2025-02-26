@@ -12,16 +12,22 @@ type CloudStorageClient interface {
 	Delete(path string) (bool, error)
 	Upload(src, target string) (bool, error)
 	Download(src, target string) (bool, error)
+
+	Size(path string) (int64, error)
 }
 
 func NewCloudStorageClient(backupType string, vars map[string]interface{}) (CloudStorageClient, error) {
 	switch backupType {
+	case constant.Local:
+		return client.NewLocalClient(vars)
 	case constant.S3:
 		return client.NewS3Client(vars)
 	case constant.OSS:
 		return client.NewOssClient(vars)
 	case constant.Sftp:
 		return client.NewSftpClient(vars)
+	case constant.WebDAV:
+		return client.NewWebDAVClient(vars)
 	case constant.MinIo:
 		return client.NewMinIoClient(vars)
 	case constant.Cos:

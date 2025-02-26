@@ -1,5 +1,11 @@
 <template>
-    <el-drawer v-model="open" :size="globalStore.isFullScreen ? '100%' : '50%'">
+    <el-drawer
+        v-model="open"
+        :size="globalStore.isFullScreen ? '100%' : '50%'"
+        :close-on-click-modal="false"
+        :close-on-press-escape="false"
+        :before-close="handleClose"
+    >
         <template #header>
             <DrawerHeader :header="$t('commons.button.log')" :resource="resource" :back="handleClose">
                 <template #extra v-if="!mobile">
@@ -37,7 +43,7 @@
             :placeholder="$t('commons.msg.noneData')"
             :indent-with-tab="true"
             :tabSize="4"
-            style="margin-top: 10px; height: calc(100vh - 375px)"
+            style="margin-top: 10px; height: calc(100vh - 200px)"
             :lineWrapping="true"
             :matchBrackets="true"
             theme="cobalt"
@@ -52,14 +58,15 @@
 
 <script lang="ts" setup>
 import i18n from '@/lang';
-import { dateFormatForName, downloadWithContent } from '@/utils/util';
-import { computed, onBeforeUnmount, reactive, ref, shallowRef, watch } from 'vue';
+import { dateFormatForName } from '@/utils/util';
+import { computed, nextTick, onBeforeUnmount, reactive, ref, shallowRef, watch } from 'vue';
 import { Codemirror } from 'vue-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { MsgError } from '@/utils/message';
 import { GlobalStore } from '@/store';
 import screenfull from 'screenfull';
+import { DownloadFile } from '@/api/modules/container';
 
 const extensions = [javascript(), oneDark];
 
@@ -86,17 +93,16 @@ const logSearch = reactive({
 });
 
 const handleClose = () => {
+    terminalSocket.value?.send('close conn');
     open.value = false;
-    terminalSocket.value?.close();
+    globalStore.isFullScreen = false;
 };
 
 function toggleFullscreen() {
-    if (screenfull.isEnabled) {
-        screenfull.toggle();
-    }
+    globalStore.isFullScreen = !globalStore.isFullScreen;
 }
 const loadTooltip = () => {
-    return i18n.global.t('commons.button.' + (screenfull.isFullscreen ? 'quitFullscreen' : 'fullscreen'));
+    return i18n.global.t('commons.button.' + (globalStore.isFullScreen ? 'quitFullscreen' : 'fullscreen'));
 };
 
 watch(logVisible, (val) => {
@@ -128,6 +134,7 @@ const searchLogs = async () => {
         MsgError(i18n.global.t('container.linesHelper'));
         return;
     }
+    terminalSocket.value?.send('close conn');
     terminalSocket.value?.close();
     logInfo.value = '';
     const href = window.location.href;
@@ -138,10 +145,12 @@ const searchLogs = async () => {
     );
     terminalSocket.value.onmessage = (event) => {
         logInfo.value += event.data;
-        const state = view.value.state;
-        view.value.dispatch({
-            selection: { anchor: state.doc.length, head: state.doc.length },
-            scrollIntoView: true,
+        nextTick(() => {
+            const state = view.value.state;
+            view.value.dispatch({
+                selection: { anchor: state.doc.length, head: state.doc.length },
+                scrollIntoView: true,
+            });
         });
     };
 };
@@ -156,7 +165,23 @@ const onDownload = async () => {
         cancelButtonText: i18n.global.t('commons.button.cancel'),
         type: 'info',
     }).then(async () => {
-        downloadWithContent(logInfo.value, resource.value + '-' + dateFormatForName(new Date()) + '.log');
+        let params = {
+            container: logSearch.compose,
+            since: logSearch.mode,
+            tail: logSearch.tail,
+            containerType: 'compose',
+        };
+        let addItem = {};
+        addItem['name'] = logSearch.compose + '-' + dateFormatForName(new Date()) + '.log';
+        DownloadFile(params).then((res) => {
+            const downloadUrl = window.URL.createObjectURL(new Blob([res]));
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = downloadUrl;
+            a.download = addItem['name'];
+            const event = new MouseEvent('click');
+            a.dispatchEvent(event);
+        });
     });
 };
 
@@ -181,7 +206,7 @@ const acceptParams = (props: DialogProps): void => {
 };
 
 onBeforeUnmount(() => {
-    terminalSocket.value?.close();
+    handleClose();
 });
 
 defineExpose({
@@ -190,6 +215,9 @@ defineExpose({
 </script>
 
 <style scoped lang="scss">
+.fullScreen {
+    border: none;
+}
 .selectWidth {
     width: 200px;
 }

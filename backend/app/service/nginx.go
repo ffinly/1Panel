@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/1Panel-dev/1Panel/backend/utils/compose"
+
 	"github.com/1Panel-dev/1Panel/backend/app/dto/request"
 	"github.com/1Panel-dev/1Panel/backend/app/dto/response"
 
@@ -26,6 +28,7 @@ type INginxService interface {
 	UpdateConfigByScope(req request.NginxConfigUpdate) error
 	GetStatus() (response.NginxStatus, error)
 	UpdateConfigFile(req request.NginxConfigFileUpdate) error
+	ClearProxyCache() error
 }
 
 func NewINginxService() INginxService {
@@ -74,6 +77,7 @@ func (n NginxService) GetStatus() (response.NginxStatus, error) {
 	if err != nil {
 		return response.NginxStatus{}, err
 	}
+	defer res.Body.Close()
 	content, err := io.ReadAll(res.Body)
 	if err != nil {
 		return response.NginxStatus{}, err
@@ -120,4 +124,23 @@ func (n NginxService) UpdateConfigFile(req request.NginxConfigFileUpdate) error 
 		return err
 	}
 	return nginxCheckAndReload(string(oldContent), filePath, nginxInstall.ContainerName)
+}
+
+func (n NginxService) ClearProxyCache() error {
+	nginxInstall, err := getAppInstallByKey(constant.AppOpenresty)
+	if err != nil {
+		return err
+	}
+	cacheDir := path.Join(nginxInstall.GetPath(), "www/common/proxy/proxy_cache_dir")
+	fileOp := files.NewFileOp()
+	if fileOp.Stat(cacheDir) {
+		if err = fileOp.CleanDir(cacheDir); err != nil {
+			return err
+		}
+		_, err = compose.Restart(nginxInstall.GetComposePath())
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
