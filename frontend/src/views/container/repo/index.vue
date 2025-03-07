@@ -8,27 +8,17 @@
 
         <LayoutContent :title="$t('container.repo')" :class="{ mask: dockerStatus != 'Running' }">
             <template #toolbar>
-                <el-row>
-                    <el-col :span="16">
+                <div class="flex justify-between gap-2 flex-wrap sm:flex-row">
+                    <div class="flex flex-wrap gap-3">
                         <el-button type="primary" @click="onOpenDialog('add')">
                             {{ $t('container.createRepo') }}
                         </el-button>
-                    </el-col>
-                    <el-col :span="8">
+                    </div>
+                    <div class="flex flex-wrap gap-3">
                         <TableSetting @search="search()" />
-                        <div class="search-button">
-                            <el-input
-                                v-model="searchName"
-                                clearable
-                                @clear="search()"
-                                suffix-icon="Search"
-                                @keyup.enter="search()"
-                                @change="search()"
-                                :placeholder="$t('commons.button.search')"
-                            ></el-input>
-                        </div>
-                    </el-col>
-                </el-row>
+                        <TableSearch @search="search()" v-model:searchName="searchName" />
+                    </div>
+                </div>
             </template>
             <template #main>
                 <ComplexTable
@@ -70,12 +60,13 @@
                 </ComplexTable>
             </template>
         </LayoutContent>
+
+        <OpDialog ref="opRef" @search="search" />
         <OperatorDialog @search="search" ref="dialogRef" />
     </div>
 </template>
 
 <script lang="ts" setup>
-import TableSetting from '@/components/table-setting/index.vue';
 import OperatorDialog from '@/views/container/repo/operator/index.vue';
 import { reactive, onMounted, ref } from 'vue';
 import { dateFormat } from '@/utils/util';
@@ -83,7 +74,6 @@ import { Container } from '@/api/interface/container';
 import { checkRepoStatus, deleteImageRepo, loadDockerStatus, searchImageRepo } from '@/api/modules/container';
 import i18n from '@/lang';
 import router from '@/routers';
-import { ElMessageBox } from 'element-plus';
 
 const loading = ref();
 const data = ref();
@@ -95,6 +85,8 @@ const paginationConfig = reactive({
     total: 0,
 });
 const searchName = ref();
+
+const opRef = ref();
 
 const dockerStatus = ref('Running');
 const loadStatus = async () => {
@@ -149,12 +141,16 @@ const onOpenDialog = async (
 };
 
 const onDelete = async (row: Container.RepoInfo) => {
-    ElMessageBox.confirm(i18n.global.t('commons.msg.delete'), i18n.global.t('commons.button.delete'), {
-        confirmButtonText: i18n.global.t('commons.button.confirm'),
-        cancelButtonText: i18n.global.t('commons.button.cancel'),
-    }).then(async () => {
-        await deleteImageRepo({ ids: [row.id] });
-        search();
+    let ids = [row.id];
+    opRef.value.acceptParams({
+        title: i18n.global.t('commons.button.delete'),
+        names: [row.name],
+        msg: i18n.global.t('commons.msg.operatorHelper', [
+            i18n.global.t('container.repo'),
+            i18n.global.t('commons.button.delete'),
+        ]),
+        api: deleteImageRepo,
+        params: { ids: ids },
     });
 };
 

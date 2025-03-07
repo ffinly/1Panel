@@ -1,18 +1,28 @@
 package client
 
 import (
-	"strings"
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
 
-	"github.com/1Panel-dev/1Panel/backend/utils/common"
+	"github.com/1Panel-dev/1Panel/backend/global"
+	"github.com/go-sql-driver/mysql"
 )
 
 type DBInfo struct {
+	Type     string `json:"type"`
 	From     string `json:"from"`
 	Database string `json:"database"`
 	Address  string `json:"address"`
 	Port     uint   `json:"port"`
 	Username string `json:"userName"`
 	Password string `json:"password"`
+
+	SSL        bool   `json:"ssl"`
+	RootCert   string `json:"rootCert"`
+	ClientKey  string `json:"clientKey"`
+	ClientCert string `json:"clientCert"`
+	SkipVerify bool   `json:"skipVerify"`
 
 	Timeout uint `json:"timeout"` // second
 }
@@ -61,6 +71,8 @@ type AccessChangeInfo struct {
 
 type BackupInfo struct {
 	Name      string `json:"name"`
+	Type      string `json:"type"`
+	Version   string `json:"version"`
 	Format    string `json:"format"`
 	TargetDir string `json:"targetDir"`
 	FileName  string `json:"fileName"`
@@ -70,6 +82,8 @@ type BackupInfo struct {
 
 type RecoverInfo struct {
 	Name       string `json:"name"`
+	Type       string `json:"type"`
+	Version    string `json:"version"`
 	Format     string `json:"format"`
 	SourceFile string `json:"sourceFile"`
 
@@ -93,24 +107,31 @@ var formatMap = map[string]string{
 	"big5":    "big5_chinese_ci",
 }
 
-func loadNameByDB(name, version string) string {
-	nameItem := common.ConvertToPinyin(name)
-	if strings.HasPrefix(version, "5.6") {
-		if len(nameItem) <= 16 {
-			return nameItem
+func ConnWithSSL(ssl, skipVerify bool, clientKey, clientCert, rootCert string) (string, error) {
+	if !ssl {
+		return "", nil
+	}
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: skipVerify,
+	}
+	if len(rootCert) != 0 {
+		pool := x509.NewCertPool()
+		if ok := pool.AppendCertsFromPEM([]byte(rootCert)); !ok {
+			global.LOG.Error("append certs from pem failed")
+			return "", errors.New("unable to append root cert to pool")
 		}
-		return strings.TrimSuffix(nameItem[:10], "_") + "_" + common.RandStr(5)
+		tlsConfig.RootCAs = pool
 	}
-	if len(nameItem) <= 32 {
-		return nameItem
+	if len(clientCert) != 0 && len(clientKey) != 0 {
+		cert, err := tls.X509KeyPair([]byte(clientCert), []byte(clientKey))
+		if err != nil {
+			return "", err
+		}
+		tlsConfig.Certificates = []tls.Certificate{cert}
 	}
-	return strings.TrimSuffix(nameItem[:25], "_") + "_" + common.RandStr(5)
-}
-
-func randomPassword(user string) string {
-	passwdItem := user
-	if len(user) > 6 {
-		passwdItem = user[:6]
+	if err := mysql.RegisterTLSConfig("cloudsql", tlsConfig); err != nil {
+		global.LOG.Errorf("register tls config failed, err: %v", err)
+		return "", err
 	}
-	return passwdItem + "@" + common.RandStrAndNum(8)
+	return "&tls=cloudsql", nil
 }

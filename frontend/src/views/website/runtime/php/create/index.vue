@@ -1,5 +1,5 @@
 <template>
-    <el-drawer :close-on-click-modal="false" v-model="open" size="50%">
+    <el-drawer :close-on-click-modal="false" :close-on-press-escape="false" v-model="open" size="50%">
         <template #header>
             <DrawerHeader :header="$t('runtime.' + mode)" :resource="runtime.name" :back="handleClose" />
         </template>
@@ -22,22 +22,23 @@
                             v-model="runtime.resource"
                             @change="changeResource(runtime.resource)"
                         >
-                            <el-radio :label="'appstore'">
+                            <el-radio :value="'appstore'">
                                 {{ $t('runtime.appstore') }}
                             </el-radio>
-                            <el-radio :label="'local'">
+                            <el-radio :value="'local'">
                                 {{ $t('runtime.local') }}
                             </el-radio>
                         </el-radio-group>
                     </el-form-item>
                     <div v-if="runtime.resource === 'appstore'">
-                        <el-form-item :label="$t('runtime.app')" prop="appId">
+                        <el-form-item :label="$t('runtime.app')" prop="appID">
                             <el-row :gutter="20">
                                 <el-col :span="12">
                                     <el-select
                                         v-model="runtime.appID"
                                         :disabled="mode === 'edit'"
                                         @change="changeApp(runtime.appID)"
+                                        class="p-w-200"
                                     >
                                         <el-option
                                             v-for="(app, index) in apps"
@@ -52,6 +53,7 @@
                                         v-model="runtime.version"
                                         :disabled="mode === 'edit'"
                                         @change="changeVersion()"
+                                        class="p-w-200"
                                     >
                                         <el-option
                                             v-for="(version, index) in appVersions"
@@ -81,7 +83,16 @@
                                         {{ $t('runtime.phpsourceHelper') }}
                                     </span>
                                 </el-form-item>
-
+                                <el-form-item :label="$t('php.extensions')">
+                                    <el-select v-model="extensions" @change="changePHPExtension()" clearable>
+                                        <el-option
+                                            v-for="(extension, index) in phpExtensions"
+                                            :key="index"
+                                            :label="extension.name"
+                                            :value="extension.extensions"
+                                        ></el-option>
+                                    </el-select>
+                                </el-form-item>
                                 <Params
                                     v-if="mode === 'create'"
                                     v-model:form="runtime.params"
@@ -96,25 +107,20 @@
                                 ></EditParams>
                                 <el-form-item>
                                     <el-alert :title="$t('runtime.buildHelper')" type="warning" :closable="false" />
-                                </el-form-item>
-                                <el-form-item>
-                                    <el-alert type="info" :closable="false">
+                                    <span class="input-help">
                                         <span>{{ $t('runtime.extendHelper') }}</span>
-                                        <span v-html="$t('runtime.phpPluginHelper')"></span>
+                                        <el-link target="_blank" type="primary" :href="globalStore.docsUrl + phpDocURL">
+                                            {{ $t('php.toExtensionsList') }}
+                                        </el-link>
                                         <br />
-                                    </el-alert>
+                                    </span>
                                 </el-form-item>
                                 <div v-if="mode == 'edit'">
                                     <el-form-item>
                                         <el-checkbox v-model="runtime.rebuild">
                                             {{ $t('runtime.rebuild') }}
                                         </el-checkbox>
-                                    </el-form-item>
-                                    <el-form-item>
-                                        <el-alert type="info" :closable="false">
-                                            <span>{{ $t('runtime.rebuildHelper') }}</span>
-                                            <br />
-                                        </el-alert>
+                                        <span class="input-help">{{ $t('runtime.rebuildHelper') }}</span>
                                     </el-form-item>
                                 </div>
                             </div>
@@ -146,7 +152,7 @@
 import { App } from '@/api/interface/app';
 import { Runtime } from '@/api/interface/runtime';
 import { GetApp, GetAppDetail, SearchApp } from '@/api/modules/app';
-import { CreateRuntime, GetRuntime, UpdateRuntime } from '@/api/modules/runtime';
+import { CreateRuntime, GetRuntime, ListPHPExtensions, UpdateRuntime } from '@/api/modules/runtime';
 import { Rules } from '@/global/form-rules';
 import i18n from '@/lang';
 import { MsgSuccess } from '@/utils/message';
@@ -155,11 +161,16 @@ import { reactive, ref } from 'vue';
 import Params from '../param/index.vue';
 import EditParams from '../edit/index.vue';
 import DrawerHeader from '@/components/drawer-header/index.vue';
+import { GlobalStore } from '@/store';
 
-interface OperateRrops {
+const globalStore = GlobalStore();
+const phpDocURL = globalStore.isIntl ? `/user_manual/websites/runtime_php/` : '/user_manual/websites/php/#php_1';
+
+interface OperateProps {
     id?: number;
     mode: string;
     type: string;
+    appID?: number;
 }
 
 const open = ref(false);
@@ -171,11 +182,54 @@ const mode = ref('create');
 const appParams = ref<App.AppParams>();
 const editParams = ref<App.InstallParams[]>();
 const appVersions = ref<string[]>([]);
+const phpExtensions = ref([]);
 const appReq = reactive({
     type: 'php',
     page: 1,
     pageSize: 20,
 });
+const phpSources = globalStore.isIntl
+    ? [
+          {
+              label: i18n.global.t('runtime.default'),
+              value: 'dl-cdn.alpinelinux.org',
+          },
+          {
+              label: i18n.global.t('runtime.xtom'),
+              value: 'mirrors.xtom.com',
+          },
+      ]
+    : [
+          {
+              label: i18n.global.t('runtime.ustc'),
+              value: 'mirrors.ustc.edu.cn',
+          },
+          {
+              label: i18n.global.t('runtime.netease'),
+              value: 'mirrors.163.com',
+          },
+          {
+              label: i18n.global.t('runtime.aliyun'),
+              value: 'mirrors.aliyun.com',
+          },
+          {
+              label: i18n.global.t('runtime.tsinghua'),
+              value: 'mirrors.tuna.tsinghua.edu.cn',
+          },
+          {
+              label: i18n.global.t('runtime.xtomhk'),
+              value: 'mirrors.xtom.com.hk',
+          },
+          {
+              label: i18n.global.t('runtime.xtom'),
+              value: 'mirrors.xtom.com',
+          },
+          {
+              label: i18n.global.t('runtime.default'),
+              value: 'dl-cdn.alpinelinux.org',
+          },
+      ];
+
 const initData = (type: string) => ({
     name: '',
     appDetailID: undefined,
@@ -184,8 +238,9 @@ const initData = (type: string) => ({
     type: type,
     resource: 'appstore',
     rebuild: false,
-    source: 'mirrors.ustc.edu.cn',
+    source: phpSources[0].value,
 });
+const extensions = ref();
 
 let runtime = reactive<Runtime.RuntimeCreate>(initData('php'));
 
@@ -198,38 +253,7 @@ const rules = ref<any>({
     source: [Rules.requiredSelect],
 });
 
-const phpSources = [
-    {
-        label: i18n.global.t('runtime.ustc'),
-        value: 'mirrors.ustc.edu.cn',
-    },
-    {
-        label: i18n.global.t('runtime.netease'),
-        value: 'mirrors.163.com',
-    },
-    {
-        label: i18n.global.t('runtime.aliyun'),
-        value: 'mirrors.aliyun.com',
-    },
-    {
-        label: i18n.global.t('runtime.tsinghua'),
-        value: 'mirrors.tuna.tsinghua.edu.cn',
-    },
-    {
-        label: i18n.global.t('runtime.xtomhk'),
-        value: 'mirrors.xtom.com.hk',
-    },
-    {
-        label: i18n.global.t('runtime.xtom'),
-        value: 'mirrors.xtom.com',
-    },
-    {
-        label: i18n.global.t('runtime.default'),
-        value: 'dl-cdn.alpinelinux.org',
-    },
-];
-
-const em = defineEmits(['close']);
+const em = defineEmits(['close', 'submit']);
 
 const handleClose = () => {
     open.value = false;
@@ -267,6 +291,7 @@ const searchApp = (appId: number) => {
 };
 
 const changeApp = (appId: number) => {
+    extensions.value = undefined;
     for (const app of apps.value) {
         if (app.id === appId) {
             initParam.value = false;
@@ -279,6 +304,7 @@ const changeApp = (appId: number) => {
 const changeVersion = () => {
     loading.value = true;
     initParam.value = false;
+    extensions.value = undefined;
     GetAppDetail(runtime.appID, runtime.version, 'runtime')
         .then((res) => {
             runtime.appDetailID = res.data.id;
@@ -314,9 +340,10 @@ const submit = async (formEl: FormInstance | undefined) => {
         if (mode.value == 'create') {
             loading.value = true;
             CreateRuntime(runtime)
-                .then(() => {
+                .then((res) => {
                     MsgSuccess(i18n.global.t('commons.msg.createSuccess'));
                     handleClose();
+                    em('submit', res.data.id);
                 })
                 .finally(() => {
                     loading.value = false;
@@ -327,6 +354,7 @@ const submit = async (formEl: FormInstance | undefined) => {
                 .then(() => {
                     MsgSuccess(i18n.global.t('commons.msg.updateSuccess'));
                     handleClose();
+                    em('submit', runtime.id);
                 })
                 .finally(() => {
                     loading.value = false;
@@ -361,16 +389,36 @@ const getRuntime = async (id: number) => {
     } catch (error) {}
 };
 
-const acceptParams = async (props: OperateRrops) => {
+const listPHPExtensions = async () => {
+    try {
+        const res = await ListPHPExtensions({
+            all: true,
+            page: 1,
+            pageSize: 100,
+        });
+        phpExtensions.value = res.data.items;
+    } catch (error) {}
+};
+
+const changePHPExtension = () => {
+    if (extensions.value == '') {
+        return;
+    }
+    runtime.params['PHP_EXTENSIONS'] = extensions.value.split(',');
+};
+
+const acceptParams = async (props: OperateProps) => {
     mode.value = props.mode;
     initParam.value = false;
     if (props.mode === 'create') {
         Object.assign(runtime, initData(props.type));
         searchApp(null);
     } else {
-        searchApp(null);
+        searchApp(props.appID);
         getRuntime(props.id);
     }
+    extensions.value = '';
+    listPHPExtensions();
     open.value = true;
 };
 

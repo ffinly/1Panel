@@ -1,5 +1,11 @@
 <template>
-    <el-drawer v-model="createVisible" :destroy-on-close="true" :close-on-click-modal="false" size="30%">
+    <el-drawer
+        v-model="createVisible"
+        :destroy-on-close="true"
+        :close-on-click-modal="false"
+        :close-on-press-escape="false"
+        size="30%"
+    >
         <template #header>
             <DrawerHeader :header="$t('database.create')" :back="handleClose" />
         </template>
@@ -8,7 +14,7 @@
                 <el-row type="flex" justify="center">
                     <el-col :span="22">
                         <el-form-item :label="$t('commons.table.name')" prop="name">
-                            <el-input clearable v-model.trim="form.name">
+                            <el-input clearable v-model.trim="form.name" @input="form.username = form.name">
                                 <template #append>
                                     <el-select v-model="form.format" style="width: 120px">
                                         <el-option label="utf8mb4" value="utf8mb4" />
@@ -42,12 +48,7 @@
                             </el-select>
                         </el-form-item>
                         <el-form-item v-if="form.permission === 'ip'" prop="permissionIPs">
-                            <el-input
-                                clearable
-                                :autosize="{ minRows: 2, maxRows: 5 }"
-                                type="textarea"
-                                v-model="form.permissionIPs"
-                            />
+                            <el-input clearable :rows="3" type="textarea" v-model="form.permissionIPs" />
                             <span class="input-help">{{ $t('database.remoteHelper') }}</span>
                         </el-form-item>
 

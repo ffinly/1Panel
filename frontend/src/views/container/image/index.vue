@@ -6,10 +6,10 @@
             <span>{{ $t('container.startIn') }}</span>
         </el-card>
 
-        <LayoutContent :title="$t('container.image')" :class="{ mask: dockerStatus != 'Running' }">
+        <LayoutContent :title="$t('container.image', 2)" :class="{ mask: dockerStatus != 'Running' }">
             <template #toolbar>
-                <el-row>
-                    <el-col :span="16">
+                <div class="flex justify-between gap-2 flex-wrap sm:flex-row">
+                    <div class="flex flex-wrap gap-3">
                         <el-button type="primary" plain @click="onOpenPull">
                             {{ $t('container.imagePull') }}
                         </el-button>
@@ -19,34 +19,26 @@
                         <el-button type="primary" plain @click="onOpenBuild">
                             {{ $t('container.imageBuild') }}
                         </el-button>
+                        <el-button type="primary" plain @click="onOpenBuildCache()">
+                            {{ $t('container.cleanBuildCache') }}
+                        </el-button>
                         <el-button type="primary" plain @click="onOpenPrune()">
                             {{ $t('container.imagePrune') }}
                         </el-button>
-                    </el-col>
-                    <el-col :span="8">
+                    </div>
+                    <div class="flex flex-wrap gap-3">
                         <TableSetting @search="search()" />
-                        <div class="search-button">
-                            <el-input
-                                v-model="searchName"
-                                clearable
-                                @clear="search()"
-                                suffix-icon="Search"
-                                @keyup.enter="search()"
-                                @change="search()"
-                                :placeholder="$t('commons.button.search')"
-                            ></el-input>
-                        </div>
-                    </el-col>
-                </el-row>
+                        <TableSearch @search="search()" v-model:searchName="searchName" />
+                    </div>
+                </div>
             </template>
             <template #main>
                 <ComplexTable :pagination-config="paginationConfig" :data="data" @search="search">
-                    <el-table-column label="ID" prop="id" width="140">
+                    <el-table-column label="ID" prop="id" width="140" show-overflow-tooltip>
                         <template #default="{ row }">
-                            <Tooltip
-                                @click="onInspect(row.id)"
-                                :text="row.id.replaceAll('sha256:', '').substring(0, 12)"
-                            />
+                            <el-text type="primary" class="cursor-pointer" @click="onInspect(row.id)">
+                                {{ row.id.replaceAll('sha256:', '').substring(0, 12) }}
+                            </el-text>
                         </template>
                     </el-table-column>
                     <el-table-column :label="$t('commons.table.status')" prop="isUsed" width="100">
@@ -68,10 +60,11 @@
                     >
                         <template #default="{ row }">
                             <el-tag
-                                style="margin-left: 5px"
+                                class="ml-2.5"
                                 v-for="(item, index) of row.tags"
                                 :key="index"
                                 :title="item"
+                                type="info"
                             >
                                 {{ item }}
                             </el-tag>
@@ -85,7 +78,7 @@
                         :formatter="dateFormat"
                     />
                     <fu-table-operations
-                        width="200px"
+                        width="250px"
                         :ellipsis="10"
                         :buttons="buttons"
                         :label="$t('commons.table.operate')"
@@ -95,6 +88,8 @@
         </LayoutContent>
 
         <CodemirrorDialog ref="mydetail" />
+
+        <OpDialog ref="opRef" @search="search" />
         <Pull ref="dialogPullRef" @search="search" />
         <Tag ref="dialogTagRef" @search="search" />
         <Push ref="dialogPushRef" @search="search" />
@@ -107,8 +102,6 @@
 </template>
 
 <script lang="ts" setup>
-import TableSetting from '@/components/table-setting/index.vue';
-import Tooltip from '@/components/tooltip/index.vue';
 import { reactive, onMounted, ref, computed } from 'vue';
 import { dateFormat } from '@/utils/util';
 import { Container } from '@/api/interface/container';
@@ -121,11 +114,19 @@ import Build from '@/views/container/image/build/index.vue';
 import Delete from '@/views/container/image/delete/index.vue';
 import Prune from '@/views/container/image/prune/index.vue';
 import CodemirrorDialog from '@/components/codemirror-dialog/index.vue';
-import { searchImage, listImageRepo, loadDockerStatus, imageRemove, inspect } from '@/api/modules/container';
+import {
+    searchImage,
+    listImageRepo,
+    loadDockerStatus,
+    imageRemove,
+    inspect,
+    containerPrune,
+} from '@/api/modules/container';
 import i18n from '@/lang';
 import router from '@/routers';
-import { useDeleteData } from '@/hooks/use-delete-data';
 import { GlobalStore } from '@/store';
+import { ElMessageBox } from 'element-plus';
+import { MsgSuccess } from '@/utils/message';
 const globalStore = GlobalStore();
 
 const mobile = computed(() => {
@@ -133,6 +134,8 @@ const mobile = computed(() => {
 });
 
 const loading = ref(false);
+
+const opRef = ref();
 
 const data = ref();
 const repos = ref();
@@ -191,6 +194,20 @@ const loadRepos = async () => {
     repos.value = res.data || [];
 };
 
+const onDelete = (row: Container.ImageInfo) => {
+    let names = [row.id.replaceAll('sha256:', '').substring(0, 12)];
+    opRef.value.acceptParams({
+        title: i18n.global.t('commons.button.delete'),
+        names: names,
+        msg: i18n.global.t('commons.msg.operatorHelper', [
+            i18n.global.t('container.image'),
+            i18n.global.t('commons.button.delete'),
+        ]),
+        api: imageRemove,
+        params: { names: names },
+    });
+};
+
 const onInspect = async (id: string) => {
     const res = await inspect({ id: id, type: 'image' });
     let detailInfo = JSON.stringify(JSON.parse(res.data), null, 2);
@@ -213,7 +230,30 @@ const onOpenBuild = () => {
 };
 
 const onOpenPrune = () => {
-    dialogPruneRef.value!.acceptParams({ list: data.value });
+    dialogPruneRef.value!.acceptParams();
+};
+
+const onOpenBuildCache = () => {
+    ElMessageBox.confirm(i18n.global.t('container.delBuildCacheHelper'), i18n.global.t('container.cleanBuildCache'), {
+        confirmButtonText: i18n.global.t('commons.button.confirm'),
+        cancelButtonText: i18n.global.t('commons.button.cancel'),
+        type: 'info',
+    }).then(async () => {
+        loading.value = true;
+        let params = {
+            pruneType: 'buildcache',
+            withTagAll: false,
+        };
+        await containerPrune(params)
+            .then((res) => {
+                loading.value = false;
+                MsgSuccess(i18n.global.t('container.cleanSuccess', [res.data.deletedNumber]));
+                search();
+            })
+            .catch(() => {
+                loading.value = false;
+            });
+    });
 };
 
 const onOpenload = () => {
@@ -225,9 +265,9 @@ const buttons = [
         label: i18n.global.t('container.tag'),
         click: (row: Container.ImageInfo) => {
             let params = {
-                itemName: row.tags.length !== 0 ? row.tags[0].split(':')[0] : '',
                 repos: repos.value,
-                sourceID: row.id,
+                imageID: row.id,
+                tags: row.tags,
             };
             dialogTagRef.value!.acceptParams(params);
         },
@@ -255,16 +295,16 @@ const buttons = [
     {
         label: i18n.global.t('commons.button.delete'),
         click: async (row: Container.ImageInfo) => {
-            if (!row.tags?.length || row.tags.length <= 1) {
-                await useDeleteData(imageRemove, { names: [row.id] }, 'commons.msg.delete');
-                search();
-                return;
+            if (row.tags && row.tags.length > 1) {
+                let params = {
+                    id: row.id,
+                    isUsed: row.isUsed,
+                    tags: row.tags,
+                };
+                dialogDeleteRef.value!.acceptParams(params);
+            } else {
+                onDelete(row);
             }
-            let params = {
-                id: row.id,
-                tags: row.tags,
-            };
-            dialogDeleteRef.value!.acceptParams(params);
         },
     },
 ];

@@ -1,7 +1,6 @@
 package service
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -35,21 +34,18 @@ type IMysqlService interface {
 	SearchWithPage(search dto.MysqlDBSearch) (int64, interface{}, error)
 	ListDBOption() ([]dto.MysqlOption, error)
 	Create(ctx context.Context, req dto.MysqlDBCreate) (*model.DatabaseMysql, error)
+	BindUser(req dto.BindUser) error
 	LoadFromRemote(req dto.MysqlLoadDB) error
 	ChangeAccess(info dto.ChangeDBInfo) error
 	ChangePassword(info dto.ChangeDBInfo) error
 	UpdateVariables(req dto.MysqlVariablesUpdate) error
-	UpdateConfByFile(info dto.MysqlConfUpdateByFile) error
 	UpdateDescription(req dto.UpdateDescription) error
 	DeleteCheck(req dto.MysqlDBDeleteCheck) ([]string, error)
 	Delete(ctx context.Context, req dto.MysqlDBDelete) error
 
 	LoadStatus(req dto.OperationWithNameAndType) (*dto.MysqlStatus, error)
 	LoadVariables(req dto.OperationWithNameAndType) (*dto.MysqlVariables, error)
-	LoadBaseInfo(req dto.OperationWithNameAndType) (*dto.DBBaseInfo, error)
 	LoadRemoteAccess(req dto.OperationWithNameAndType) (bool, error)
-
-	LoadDatabaseFile(req dto.OperationWithNameAndType) (string, error)
 }
 
 func NewIMysqlService() IMysqlService {
@@ -144,6 +140,46 @@ func (u *MysqlService) Create(ctx context.Context, req dto.MysqlDBCreate) (*mode
 	return &createItem, nil
 }
 
+func (u *MysqlService) BindUser(req dto.BindUser) error {
+	if cmd.CheckIllegal(req.Username, req.Password, req.Permission) {
+		return buserr.New(constant.ErrCmdIllegal)
+	}
+
+	dbItem, err := mysqlRepo.Get(mysqlRepo.WithByMysqlName(req.Database), commonRepo.WithByName(req.DB))
+	if err != nil {
+		return err
+	}
+	cli, version, err := LoadMysqlClientByFrom(req.Database)
+	if err != nil {
+		return err
+	}
+	defer cli.Close()
+
+	if err := cli.CreateUser(client.CreateInfo{
+		Name:       dbItem.Name,
+		Format:     dbItem.Format,
+		Username:   req.Username,
+		Password:   req.Password,
+		Permission: req.Permission,
+		Version:    version,
+		Timeout:    300,
+	}, false); err != nil {
+		return err
+	}
+	pass, err := encrypt.StringEncrypt(req.Password)
+	if err != nil {
+		return fmt.Errorf("decrypt database db password failed, err: %v", err)
+	}
+	if err := mysqlRepo.Update(dbItem.ID, map[string]interface{}{
+		"username":   req.Username,
+		"password":   pass,
+		"permission": req.Permission,
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (u *MysqlService) LoadFromRemote(req dto.MysqlLoadDB) error {
 	client, version, err := LoadMysqlClientByFrom(req.Database)
 	if err != nil {
@@ -158,11 +194,16 @@ func (u *MysqlService) LoadFromRemote(req dto.MysqlLoadDB) error {
 	if err != nil {
 		return err
 	}
+	deleteList := databases
 	for _, data := range datas {
 		hasOld := false
-		for _, oldData := range databases {
-			if strings.EqualFold(oldData.Name, data.Name) && strings.EqualFold(oldData.MysqlName, data.MysqlName) {
+		for i := 0; i < len(databases); i++ {
+			if strings.EqualFold(databases[i].Name, data.Name) && strings.EqualFold(databases[i].MysqlName, data.MysqlName) {
 				hasOld = true
+				if databases[i].IsDelete {
+					_ = mysqlRepo.Update(databases[i].ID, map[string]interface{}{"is_delete": false})
+				}
+				deleteList = append(deleteList[:i], deleteList[i+1:]...)
 				break
 			}
 		}
@@ -175,6 +216,9 @@ func (u *MysqlService) LoadFromRemote(req dto.MysqlLoadDB) error {
 				return err
 			}
 		}
+	}
+	for _, delItem := range deleteList {
+		_ = mysqlRepo.Update(delItem.ID, map[string]interface{}{"is_delete": true})
 	}
 	return nil
 }
@@ -203,7 +247,7 @@ func (u *MysqlService) DeleteCheck(req dto.MysqlDBDeleteCheck) ([]string, error)
 			}
 		}
 	} else {
-		apps, _ := appInstallResourceRepo.GetBy(appInstallResourceRepo.WithResourceId(db.ID))
+		apps, _ := appInstallResourceRepo.GetBy(appInstallResourceRepo.WithResourceId(db.ID), appRepo.WithKey(req.Type))
 		for _, app := range apps {
 			appInstall, _ := appInstallRepo.GetFirst(commonRepo.WithByID(app.AppInstallId))
 			if appInstall.ID != 0 {
@@ -310,7 +354,7 @@ func (u *MysqlService) ChangePassword(req dto.ChangeDBInfo) error {
 			}
 
 			global.LOG.Infof("start to update mysql password used by app %s-%s", appModel.Key, appInstall.Name)
-			if err := updateInstallInfoInDB(appModel.Key, appInstall.Name, "user-password", true, req.Value); err != nil {
+			if err := updateInstallInfoInDB(appModel.Key, appInstall.Name, "user-password", req.Value); err != nil {
 				return err
 			}
 		}
@@ -323,8 +367,19 @@ func (u *MysqlService) ChangePassword(req dto.ChangeDBInfo) error {
 		return nil
 	}
 
-	if err := updateInstallInfoInDB(req.Type, req.Database, "password", false, req.Value); err != nil {
+	if err := updateInstallInfoInDB(req.Type, req.Database, "password", req.Value); err != nil {
 		return err
+	}
+	if req.From == "local" {
+		remote, err := databaseRepo.Get(commonRepo.WithByName(req.Database))
+		if err != nil {
+			return err
+		}
+		pass, err := encrypt.StringEncrypt(req.Value)
+		if err != nil {
+			return fmt.Errorf("decrypt database password failed, err: %v", err)
+		}
+		_ = databaseRepo.Update(remote.ID, map[string]interface{}{"password": pass})
 	}
 	return nil
 }
@@ -366,26 +421,6 @@ func (u *MysqlService) ChangeAccess(req dto.ChangeDBInfo) error {
 		_ = mysqlRepo.Update(mysqlData.ID, map[string]interface{}{"permission": req.Value})
 	}
 
-	return nil
-}
-
-func (u *MysqlService) UpdateConfByFile(req dto.MysqlConfUpdateByFile) error {
-	app, err := appInstallRepo.LoadBaseInfo(req.Type, req.Database)
-	if err != nil {
-		return err
-	}
-	path := fmt.Sprintf("%s/%s/%s/conf/my.cnf", constant.AppInstallDir, req.Type, app.Name)
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0640)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	write := bufio.NewWriter(file)
-	_, _ = write.WriteString(req.File)
-	write.Flush()
-	if _, err := compose.Restart(fmt.Sprintf("%s/%s/%s/docker-compose.yml", constant.AppInstallDir, req.Type, app.Name)); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -434,25 +469,12 @@ func (u *MysqlService) UpdateVariables(req dto.MysqlVariablesUpdate) error {
 	return nil
 }
 
-func (u *MysqlService) LoadBaseInfo(req dto.OperationWithNameAndType) (*dto.DBBaseInfo, error) {
-	var data dto.DBBaseInfo
-	app, err := appInstallRepo.LoadBaseInfo(req.Type, req.Name)
-	if err != nil {
-		return nil, err
-	}
-	data.ContainerName = app.ContainerName
-	data.Name = app.Name
-	data.Port = int64(app.Port)
-
-	return &data, nil
-}
-
 func (u *MysqlService) LoadRemoteAccess(req dto.OperationWithNameAndType) (bool, error) {
 	app, err := appInstallRepo.LoadBaseInfo(req.Type, req.Name)
 	if err != nil {
 		return false, err
 	}
-	hosts, err := executeSqlForRows(app.ContainerName, app.Password, "select host from mysql.user where user='root';")
+	hosts, err := executeSqlForRows(app.ContainerName, app.Key, app.Password, "select host from mysql.user where user='root';")
 	if err != nil {
 		return false, err
 	}
@@ -470,7 +492,7 @@ func (u *MysqlService) LoadVariables(req dto.OperationWithNameAndType) (*dto.Mys
 	if err != nil {
 		return nil, err
 	}
-	variableMap, err := executeSqlForMaps(app.ContainerName, app.Password, "show global variables;")
+	variableMap, err := executeSqlForMaps(app.ContainerName, app.Key, app.Password, "show global variables;")
 	if err != nil {
 		return nil, err
 	}
@@ -489,7 +511,7 @@ func (u *MysqlService) LoadStatus(req dto.OperationWithNameAndType) (*dto.MysqlS
 		return nil, err
 	}
 
-	statusMap, err := executeSqlForMaps(app.ContainerName, app.Password, "show global status;")
+	statusMap, err := executeSqlForMaps(app.ContainerName, app.Key, app.Password, "show global status;")
 	if err != nil {
 		return nil, err
 	}
@@ -503,19 +525,22 @@ func (u *MysqlService) LoadStatus(req dto.OperationWithNameAndType) (*dto.MysqlS
 
 	if value, ok := statusMap["Run"]; ok {
 		uptime, _ := strconv.Atoi(value)
-		info.Run = time.Unix(time.Now().Unix()-int64(uptime), 0).Format("2006-01-02 15:04:05")
+		info.Run = time.Unix(time.Now().Unix()-int64(uptime), 0).Format(constant.DateTimeLayout)
 	} else {
 		if value, ok := statusMap["Uptime"]; ok {
 			uptime, _ := strconv.Atoi(value)
-			info.Run = time.Unix(time.Now().Unix()-int64(uptime), 0).Format("2006-01-02 15:04:05")
+			info.Run = time.Unix(time.Now().Unix()-int64(uptime), 0).Format(constant.DateTimeLayout)
 		}
 	}
 
 	info.File = "OFF"
 	info.Position = "OFF"
-	rows, err := executeSqlForRows(app.ContainerName, app.Password, "show master status;")
+	rows, err := executeSqlForRows(app.ContainerName, app.Key, app.Password, "show master status;")
 	if err != nil {
-		return nil, err
+		rows, err = executeSqlForRows(app.ContainerName, app.Key, app.Password, "SHOW BINARY LOG STATUS;")
+		if err != nil {
+			return nil, err
+		}
 	}
 	if len(rows) > 2 {
 		itemValue := strings.Split(rows[1], "\t")
@@ -528,32 +553,8 @@ func (u *MysqlService) LoadStatus(req dto.OperationWithNameAndType) (*dto.MysqlS
 	return &info, nil
 }
 
-func (u *MysqlService) LoadDatabaseFile(req dto.OperationWithNameAndType) (string, error) {
-	filePath := ""
-	switch req.Type {
-	case "mysql-conf":
-		filePath = path.Join(global.CONF.System.DataDir, fmt.Sprintf("apps/mysql/%s/conf/my.cnf", req.Name))
-	case "mariadb-conf":
-		filePath = path.Join(global.CONF.System.DataDir, fmt.Sprintf("apps/mariadb/%s/conf/my.cnf", req.Name))
-	case "redis-conf":
-		filePath = path.Join(global.CONF.System.DataDir, fmt.Sprintf("apps/redis/%s/conf/redis.conf", req.Name))
-	case "mysql-slow-logs":
-		filePath = path.Join(global.CONF.System.DataDir, fmt.Sprintf("apps/mysql/%s/data/1Panel-slow.log", req.Name))
-	case "mariadb-slow-logs":
-		filePath = path.Join(global.CONF.System.DataDir, fmt.Sprintf("apps/mariadb/%s/db/data/1Panel-slow.log", req.Name))
-	}
-	if _, err := os.Stat(filePath); err != nil {
-		return "", buserr.New("ErrHttpReqNotFound")
-	}
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return "", err
-	}
-	return string(content), nil
-}
-
-func executeSqlForMaps(containerName, password, command string) (map[string]string, error) {
-	cmd := exec.Command("docker", "exec", containerName, "mysql", "-uroot", "-p"+password, "-e", command)
+func executeSqlForMaps(containerName, dbType, password, command string) (map[string]string, error) {
+	cmd := exec.Command("docker", "exec", containerName, dbType, "-uroot", "-p"+password, "-e", command)
 	stdout, err := cmd.CombinedOutput()
 	stdStr := strings.ReplaceAll(string(stdout), "mysql: [Warning] Using a password on the command line interface can be insecure.\n", "")
 	if err != nil || strings.HasPrefix(string(stdStr), "ERROR ") {
@@ -571,8 +572,8 @@ func executeSqlForMaps(containerName, password, command string) (map[string]stri
 	return rowMap, nil
 }
 
-func executeSqlForRows(containerName, password, command string) ([]string, error) {
-	cmd := exec.Command("docker", "exec", containerName, "mysql", "-uroot", "-p"+password, "-e", command)
+func executeSqlForRows(containerName, dbType, password, command string) ([]string, error) {
+	cmd := exec.Command("docker", "exec", containerName, dbType, "-uroot", "-p"+password, "-e", command)
 	stdout, err := cmd.CombinedOutput()
 	stdStr := strings.ReplaceAll(string(stdout), "mysql: [Warning] Using a password on the command line interface can be insecure.\n", "")
 	if err != nil || strings.HasPrefix(string(stdStr), "ERROR ") {
@@ -634,6 +635,7 @@ func LoadMysqlClientByFrom(database string) (mysql.MysqlClient, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
+	dbInfo.Type = databaseItem.Type
 	dbInfo.From = databaseItem.From
 	dbInfo.Database = database
 	if dbInfo.From != "local" {
@@ -641,6 +643,11 @@ func LoadMysqlClientByFrom(database string) (mysql.MysqlClient, string, error) {
 		dbInfo.Port = databaseItem.Port
 		dbInfo.Username = databaseItem.Username
 		dbInfo.Password = databaseItem.Password
+		dbInfo.SSL = databaseItem.SSL
+		dbInfo.ClientKey = databaseItem.ClientKey
+		dbInfo.ClientCert = databaseItem.ClientCert
+		dbInfo.RootCert = databaseItem.RootCert
+		dbInfo.SkipVerify = databaseItem.SkipVerify
 		version = databaseItem.Version
 
 	} else {

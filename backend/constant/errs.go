@@ -8,16 +8,17 @@ const (
 	CodeSuccess           = 200
 	CodeErrBadRequest     = 400
 	CodeErrUnauthorized   = 401
-	CodeErrUnSafety       = 402
-	CodeErrForbidden      = 403
 	CodeErrNotFound       = 404
-	CodePasswordExpired   = 405
 	CodeAuth              = 406
 	CodeGlobalLoading     = 407
-	CodeErrIP             = 408
-	CodeErrDomain         = 409
 	CodeErrInternalServer = 500
-	CodeErrHeader         = 406
+
+	CodeErrIP           = 310
+	CodeErrDomain       = 311
+	CodeErrEntrance     = 312
+	CodePasswordExpired = 313
+
+	CodeErrXpack = 410
 )
 
 // internal
@@ -36,13 +37,23 @@ var (
 
 // api
 var (
-	ErrTypeInternalServer  = "ErrInternalServer"
-	ErrTypeInvalidParams   = "ErrInvalidParams"
-	ErrTypeNotLogin        = "ErrNotLogin"
-	ErrTypePasswordExpired = "ErrPasswordExpired"
-	ErrNameIsExist         = "ErrNameIsExist"
-	ErrDemoEnvironment     = "ErrDemoEnvironment"
-	ErrCmdIllegal          = "ErrCmdIllegal"
+	ErrTypeInternalServer      = "ErrInternalServer"
+	ErrTypeInvalidParams       = "ErrInvalidParams"
+	ErrTypeNotLogin            = "ErrNotLogin"
+	ErrTypePasswordExpired     = "ErrPasswordExpired"
+	ErrNameIsExist             = "ErrNameIsExist"
+	ErrDemoEnvironment         = "ErrDemoEnvironment"
+	ErrCmdIllegal              = "ErrCmdIllegal"
+	ErrXpackNotFound           = "ErrXpackNotFound"
+	ErrXpackNotActive          = "ErrXpackNotActive"
+	ErrXpackLost               = "ErrXpackLost"
+	ErrXpackTimeout            = "ErrXpackTimeout"
+	ErrXpackOutOfDate          = "ErrXpackOutOfDate"
+	ErrApiConfigStatusInvalid  = "ErrApiConfigStatusInvalid"
+	ErrApiConfigKeyInvalid     = "ErrApiConfigKeyInvalid"
+	ErrApiConfigIPInvalid      = "ErrApiConfigIPInvalid"
+	ErrApiConfigDisable        = "ErrApiConfigDisable"
+	ErrApiConfigKeyTimeInvalid = "ErrApiConfigKeyTimeInvalid"
 )
 
 // app
@@ -60,6 +71,9 @@ var (
 	ErrInstallDirNotFound  = "ErrInstallDirNotFound"
 	ErrContainerName       = "ErrContainerName"
 	ErrAppNameExist        = "ErrAppNameExist"
+	ErrFileNotFound        = "ErrFileNotFound"
+	ErrFileParseApp        = "ErrFileParseApp"
+	ErrAppParamKey         = "ErrAppParamKey"
 )
 
 // website
@@ -71,14 +85,16 @@ var (
 	ErrUsernameIsNotExist = "ErrUsernameIsNotExist"
 	ErrBackupMatch        = "ErrBackupMatch"
 	ErrBackupExist        = "ErrBackupExist"
+	ErrDomainIsUsed       = "ErrDomainIsUsed"
 )
 
 // ssl
 var (
-	ErrSSLCannotDelete     = "ErrSSLCannotDelete"
-	ErrAccountCannotDelete = "ErrAccountCannotDelete"
-	ErrSSLApply            = "ErrSSLApply"
-	ErrEmailIsExist        = "ErrEmailIsExist"
+	ErrSSLCannotDelete               = "ErrSSLCannotDelete"
+	ErrAccountCannotDelete           = "ErrAccountCannotDelete"
+	ErrSSLApply                      = "ErrSSLApply"
+	ErrEmailIsExist                  = "ErrEmailIsExist"
+	ErrEabKidOrEabHmacKeyCannotBlank = "ErrEabKidOrEabHmacKeyCannotBlank"
 )
 
 // file
@@ -86,9 +102,12 @@ var (
 	ErrPathNotFound     = "ErrPathNotFound"
 	ErrMovePathFailed   = "ErrMovePathFailed"
 	ErrLinkPathNotFound = "ErrLinkPathNotFound"
-	ErrFileIsExit       = "ErrFileIsExit"
+	ErrFileIsExist      = "ErrFileIsExist"
 	ErrFileUpload       = "ErrFileUpload"
 	ErrFileDownloadDir  = "ErrFileDownloadDir"
+	ErrCmdNotFound      = "ErrCmdNotFound"
+	ErrFavoriteExist    = "ErrFavoriteExist"
+	ErrPathNotDelete    = "ErrPathNotDelete"
 )
 
 // mysql
@@ -107,9 +126,11 @@ var (
 
 // container
 var (
-	ErrInUsed       = "ErrInUsed"
-	ErrObjectInUsed = "ErrObjectInUsed"
-	ErrPortRules    = "ErrPortRules"
+	ErrInUsed            = "ErrInUsed"
+	ErrObjectInUsed      = "ErrObjectInUsed"
+	ErrObjectBeDependent = "ErrObjectBeDependent"
+	ErrPortRules         = "ErrPortRules"
+	ErrPgImagePull       = "ErrPgImagePull"
 )
 
 // runtime
@@ -131,5 +152,40 @@ var (
 )
 
 var (
-	ErrFirewall = "ErrFirewall"
+	ErrFirewallNone = "ErrFirewallNone"
+	ErrFirewallBoth = "ErrFirewallBoth"
+)
+
+// cronjob
+var (
+	ErrBashExecute = "ErrBashExecute"
+)
+
+var (
+	ErrNotExistUser = "ErrNotExistUser"
+)
+
+// license
+var (
+	ErrLicense      = "ErrLicense"
+	ErrLicenseCheck = "ErrLicenseCheck"
+	ErrXpackVersion = "ErrXpackVersion"
+	ErrLicenseSave  = "ErrLicenseSave"
+	ErrLicenseSync  = "ErrLicenseSync"
+)
+
+// alert
+var (
+	ErrAlert       = "ErrAlert"
+	ErrAlertPush   = "ErrAlertPush"
+	ErrAlertSave   = "ErrAlertSave"
+	ErrAlertSync   = "ErrAlertSync"
+	ErrAlertRemote = "ErrAlertRemote"
+)
+
+// mobile app
+var (
+	ErrVerifyToken  = "ErrVerifyToken"
+	ErrInvalidToken = "ErrInvalidToken"
+	ErrExpiredToken = "ErrExpiredToken"
 )

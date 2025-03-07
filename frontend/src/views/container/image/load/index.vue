@@ -1,5 +1,11 @@
 <template>
-    <el-drawer v-model="loadVisible" :destroy-on-close="true" :close-on-click-modal="false" size="30%">
+    <el-drawer
+        v-model="loadVisible"
+        :destroy-on-close="true"
+        :close-on-click-modal="false"
+        :close-on-press-escape="false"
+        size="30%"
+    >
         <template #header>
             <DrawerHeader :header="$t('container.importImage')" :back="handleClose" />
         </template>
@@ -18,10 +24,10 @@
         </el-form>
         <template #footer>
             <span class="dialog-footer">
-                <el-button :disabeld="loading" @click="loadVisible = false">
+                <el-button :disabled="loading" @click="loadVisible = false">
                     {{ $t('commons.button.cancel') }}
                 </el-button>
-                <el-button :disabeld="loading" type="primary" @click="onSubmit(formRef)">
+                <el-button :disabled="loading" type="primary" @click="onSubmit(formRef)">
                     {{ $t('commons.button.import') }}
                 </el-button>
             </span>

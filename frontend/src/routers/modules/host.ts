@@ -7,7 +7,7 @@ const hostRouter = {
     redirect: '/hosts/security',
     meta: {
         icon: 'p-host',
-        title: 'menu.host',
+        title: 'menu.system',
     },
     children: [
         {
@@ -31,7 +31,7 @@ const hostRouter = {
         },
         {
             path: '/hosts/monitor/setting',
-            name: 'MonitorSetting',
+            name: 'HostMonitorSetting',
             component: () => import('@/views/host/monitor/setting/index.vue'),
             hidden: true,
             meta: {
@@ -43,6 +43,7 @@ const hostRouter = {
         {
             path: '/hosts/terminal',
             name: 'Terminal',
+            props: true,
             component: () => import('@/views/host/terminal/index.vue'),
             meta: {
                 title: 'menu.terminal',
@@ -56,6 +57,16 @@ const hostRouter = {
             component: () => import('@/views/host/firewall/port/index.vue'),
             meta: {
                 title: 'menu.firewall',
+                requiresAuth: false,
+            },
+        },
+        {
+            path: '/hosts/firewall/forward',
+            name: 'FirewallForward',
+            component: () => import('@/views/host/firewall/forward/index.vue'),
+            hidden: true,
+            meta: {
+                activeMenu: '/hosts/firewall/port',
                 requiresAuth: false,
             },
         },
@@ -87,17 +98,6 @@ const hostRouter = {
             component: () => import('@/views/host/process/network/index.vue'),
             meta: {
                 activeMenu: '/hosts/process/process',
-                requiresAuth: false,
-            },
-        },
-        {
-            path: '/hosts/tool/supersivor',
-            name: 'Supervisor',
-            component: () => import('@/views/host/tool/supervisor/index.vue'),
-            meta: {
-                title: 'menu.supervisor',
-                activeMenu: '/hosts/tool/supersivor',
-                keepAlive: true,
                 requiresAuth: false,
             },
         },

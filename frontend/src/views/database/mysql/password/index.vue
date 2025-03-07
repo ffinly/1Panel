@@ -1,6 +1,12 @@
 <template>
     <div>
-        <el-drawer v-model="changeVisible" :destroy-on-close="true" :close-on-click-modal="false" width="30%">
+        <el-drawer
+            v-model="changeVisible"
+            :destroy-on-close="true"
+            :close-on-click-modal="false"
+            :close-on-press-escape="false"
+            width="30%"
+        >
             <template #header>
                 <DrawerHeader :header="title" :resource="changeForm.mysqlName" :back="handleClose" />
             </template>
@@ -33,12 +39,7 @@
                                 </el-select>
                             </el-form-item>
                             <el-form-item v-if="changeForm.privilege === 'ip'" prop="privilegeIPs">
-                                <el-input
-                                    clearable
-                                    :autosize="{ minRows: 2, maxRows: 5 }"
-                                    type="textarea"
-                                    v-model="changeForm.privilegeIPs"
-                                />
+                                <el-input clearable :rows="3" type="textarea" v-model="changeForm.privilegeIPs" />
                                 <span class="input-help">{{ $t('database.remoteHelper') }}</span>
                             </el-form-item>
                         </div>

@@ -1,59 +1,30 @@
 <template>
     <div>
         <FireRouter />
-        <LayoutContent :title="$t('menu.network')" v-loading="loading">
+        <LayoutContent :title="$t('menu.network', 2)" v-loading="loading">
             <template #toolbar>
-                <el-row>
-                    <el-col :span="24">
-                        <div style="width: 100%">
-                            <el-form-item style="float: right">
-                                <el-row :gutter="20">
-                                    <el-col :span="8">
-                                        <div class="search-button">
-                                            <el-input
-                                                typpe="number"
-                                                v-model.number="netSearch.processID"
-                                                clearable
-                                                @clear="search()"
-                                                suffix-icon="Search"
-                                                @keyup.enter="search()"
-                                                @change="search()"
-                                                :placeholder="$t('process.pid')"
-                                            ></el-input>
-                                        </div>
-                                    </el-col>
-                                    <el-col :span="8">
-                                        <div class="search-button">
-                                            <el-input
-                                                v-model.trim="netSearch.processName"
-                                                clearable
-                                                @clear="search()"
-                                                suffix-icon="Search"
-                                                @keyup.enter="search()"
-                                                @change="search()"
-                                                :placeholder="$t('process.processName')"
-                                            ></el-input>
-                                        </div>
-                                    </el-col>
-                                    <el-col :span="8">
-                                        <div class="search-button">
-                                            <el-input
-                                                type="number"
-                                                v-model.number="netSearch.port"
-                                                clearable
-                                                @clear="search()"
-                                                suffix-icon="Search"
-                                                @keyup.enter="search()"
-                                                @change="search()"
-                                                :placeholder="$t('commons.table.port')"
-                                            ></el-input>
-                                        </div>
-                                    </el-col>
-                                </el-row>
-                            </el-form-item>
-                        </div>
-                    </el-col>
-                </el-row>
+                <div class="flex justify-between gap-2 flex-wrap sm:flex-row">
+                    <div><!-- 占位 --></div>
+                    <div class="flex flex-wrap gap-3">
+                        <TableSearch
+                            @search="search()"
+                            :placeholder="$t('process.pid')"
+                            v-model:searchName="netSearch.processID"
+                        />
+
+                        <TableSearch
+                            @search="search()"
+                            :placeholder="$t('process.processName')"
+                            v-model:searchName="netSearch.processName"
+                        />
+
+                        <TableSearch
+                            @search="search()"
+                            :placeholder="$t('commons.table.port')"
+                            v-model:searchName="netSearch.port"
+                        />
+                    </div>
+                </div>
             </template>
             <template #main>
                 <ComplexTable :data="data" @sort-change="changeSort" @filter-change="changeFilter" ref="tableRef">
@@ -80,7 +51,7 @@
                     <el-table-column
                         prop="status"
                         column-key="status"
-                        :label="$t('app.status')"
+                        :label="$t('process.state')"
                         :filters="[
                             { text: 'LISTEN', value: 'LISTEN' },
                             { text: 'ESTABLISHED', value: 'ESTABLISHED' },
@@ -210,10 +181,10 @@ const sendMsg = () => {
 const search = () => {
     if (isWsOpen()) {
         if (typeof netSearch.processID === 'string') {
-            netSearch.processID = undefined;
+            netSearch.processID = Number(netSearch.processID);
         }
         if (typeof netSearch.port === 'string') {
-            netSearch.port = undefined;
+            netSearch.port = Number(netSearch.port);
         }
         processSocket.send(JSON.stringify(netSearch));
     }
