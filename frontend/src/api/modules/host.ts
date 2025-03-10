@@ -1,5 +1,5 @@
 import http from '@/api';
-import { ResPage } from '../interface';
+import { ResPage, SearchWithPage } from '../interface';
 import { Command } from '../interface/command';
 import { Host } from '../interface/host';
 import { Base64 } from 'js-base64';
@@ -13,37 +13,37 @@ export const getHostTree = (params: Host.ReqSearch) => {
     return http.post<Array<Host.HostTree>>(`/hosts/tree`, params);
 };
 export const addHost = (params: Host.HostOperate) => {
-    let reqest = deepCopy(params) as Host.HostOperate;
-    if (reqest.password) {
-        reqest.password = Base64.encode(reqest.password);
+    let request = deepCopy(params) as Host.HostOperate;
+    if (request.password) {
+        request.password = Base64.encode(request.password);
     }
-    if (reqest.privateKey) {
-        reqest.privateKey = Base64.encode(reqest.privateKey);
+    if (request.privateKey) {
+        request.privateKey = Base64.encode(request.privateKey);
     }
-    return http.post<Host.HostOperate>(`/hosts`, reqest);
+    return http.post<Host.HostOperate>(`/hosts`, request);
 };
 export const testByInfo = (params: Host.HostConnTest) => {
-    let reqest = deepCopy(params) as Host.HostOperate;
-    if (reqest.password) {
-        reqest.password = Base64.encode(reqest.password);
+    let request = deepCopy(params) as Host.HostOperate;
+    if (request.password) {
+        request.password = Base64.encode(request.password);
     }
-    if (reqest.privateKey) {
-        reqest.privateKey = Base64.encode(reqest.privateKey);
+    if (request.privateKey) {
+        request.privateKey = Base64.encode(request.privateKey);
     }
-    return http.post<boolean>(`/hosts/test/byinfo`, reqest);
+    return http.post<boolean>(`/hosts/test/byinfo`, request);
 };
 export const testByID = (id: number) => {
     return http.post<boolean>(`/hosts/test/byid/${id}`);
 };
 export const editHost = (params: Host.HostOperate) => {
-    let reqest = deepCopy(params) as Host.HostOperate;
-    if (reqest.password) {
-        reqest.password = Base64.encode(reqest.password);
+    let request = deepCopy(params) as Host.HostOperate;
+    if (request.password) {
+        request.password = Base64.encode(request.password);
     }
-    if (reqest.privateKey) {
-        reqest.privateKey = Base64.encode(reqest.privateKey);
+    if (request.privateKey) {
+        request.privateKey = Base64.encode(request.privateKey);
     }
-    return http.post(`/hosts/update`, reqest);
+    return http.post(`/hosts/update`, request);
 };
 export const editHostGroup = (params: Host.GroupChange) => {
     return http.post(`/hosts/update/group`, params);
@@ -56,8 +56,11 @@ export const deleteHost = (params: { ids: number[] }) => {
 export const getCommandList = () => {
     return http.get<Array<Command.CommandInfo>>(`/hosts/command`, {});
 };
-export const getCommandPage = (params: Command.CommandSearch) => {
+export const getCommandPage = (params: SearchWithPage) => {
     return http.post<ResPage<Command.CommandInfo>>(`/hosts/command/search`, params);
+};
+export const getCommandTree = () => {
+    return http.get<any>(`/hosts/command/tree`);
 };
 export const addCommand = (params: Command.CommandOperate) => {
     return http.post<Command.CommandOperate>(`/hosts/command`, params);
@@ -67,6 +70,19 @@ export const editCommand = (params: Command.CommandOperate) => {
 };
 export const deleteCommand = (params: { ids: number[] }) => {
     return http.post(`/hosts/command/del`, params);
+};
+
+export const getRedisCommandList = () => {
+    return http.get<Array<Command.RedisCommand>>(`/hosts/command/redis`, {});
+};
+export const getRedisCommandPage = (params: SearchWithPage) => {
+    return http.post<ResPage<Command.RedisCommand>>(`/hosts/command/redis/search`, params);
+};
+export const saveRedisCommand = (params: Command.RedisCommand) => {
+    return http.post(`/hosts/command/redis`, params);
+};
+export const deleteRedisCommand = (params: { ids: number[] }) => {
+    return http.post(`/hosts/command/redis/del`, params);
 };
 
 // firewall
@@ -81,6 +97,9 @@ export const operateFire = (operation: string) => {
 };
 export const operatePortRule = (params: Host.RulePort) => {
     return http.post<Host.RulePort>(`/hosts/firewall/port`, params, TimeoutEnum.T_40S);
+};
+export const operateForwardRule = (params: { rules: Host.RuleForward[]; forceDelete: boolean }) => {
+    return http.post<Host.RulePort>(`/hosts/firewall/forward`, params, TimeoutEnum.T_40S);
 };
 export const operateIPRule = (params: Host.RuleIP) => {
     return http.post<Host.RuleIP>(`/hosts/firewall/ip`, params, TimeoutEnum.T_40S);
@@ -98,6 +117,20 @@ export const batchOperateRule = (params: Host.BatchRule) => {
     return http.post(`/hosts/firewall/batch`, params, TimeoutEnum.T_60S);
 };
 
+// monitors
+export const loadMonitor = (param: Host.MonitorSearch) => {
+    return http.post<Array<Host.MonitorData>>(`/hosts/monitor/search`, param);
+};
+export const getNetworkOptions = () => {
+    return http.get<Array<string>>(`/hosts/monitor/netoptions`);
+};
+export const getIOOptions = () => {
+    return http.get<Array<string>>(`/hosts/monitor/iooptions`);
+};
+export const cleanMonitors = () => {
+    return http.post(`/hosts/monitor/clean`, {});
+};
+
 // ssh
 export const getSSHInfo = () => {
     return http.post<Host.SSHInfo>(`/hosts/ssh/search`);
@@ -106,13 +139,13 @@ export const getSSHConf = () => {
     return http.get<string>(`/hosts/ssh/conf`);
 };
 export const operateSSH = (operation: string) => {
-    return http.post(`/hosts/ssh/operate`, { operation: operation });
+    return http.post(`/hosts/ssh/operate`, { operation: operation }, TimeoutEnum.T_40S);
 };
-export const updateSSH = (key: string, value: string) => {
-    return http.post(`/hosts/ssh/update`, { key: key, value: value });
+export const updateSSH = (params: Host.SSHUpdate) => {
+    return http.post(`/hosts/ssh/update`, params, TimeoutEnum.T_40S);
 };
 export const updateSSHByfile = (file: string) => {
-    return http.post(`/hosts/ssh/conffile/update`, { file: file });
+    return http.post(`/hosts/ssh/conffile/update`, { file: file }, TimeoutEnum.T_40S);
 };
 export const generateSecret = (params: Host.SSHGenerate) => {
     return http.post(`/hosts/ssh/generate`, params);
@@ -122,7 +155,4 @@ export const loadSecret = (mode: string) => {
 };
 export const loadSSHLogs = (params: Host.searchSSHLog) => {
     return http.post<Host.sshLog>(`/hosts/ssh/log`, params);
-};
-export const loadAnalysis = (params: Host.analysisSSHLog) => {
-    return http.post<Host.logAnalysisRes>(`/hosts/ssh/log/analysis`, params, TimeoutEnum.T_40S);
 };

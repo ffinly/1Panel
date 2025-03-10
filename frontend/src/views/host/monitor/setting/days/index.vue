@@ -5,6 +5,7 @@
             :destroy-on-close="true"
             @close="handleClose"
             :close-on-click-modal="false"
+            :close-on-press-escape="false"
             size="30%"
         >
             <template #header>
@@ -15,7 +16,7 @@
                     <el-col :span="22">
                         <el-form-item
                             :label="$t('monitor.storeDays')"
-                            :rules="[Rules.integerNumber, checkNumberRange(1, 30)]"
+                            :rules="[Rules.integerNumber]"
                             prop="monitorStoreDays"
                         >
                             <el-input clearable v-model.number="form.monitorStoreDays" />
@@ -39,7 +40,7 @@ import { reactive, ref } from 'vue';
 import i18n from '@/lang';
 import { MsgSuccess } from '@/utils/message';
 import { FormInstance } from 'element-plus';
-import { Rules, checkNumberRange } from '@/global/form-rules';
+import { Rules } from '@/global/form-rules';
 import { updateSetting } from '@/api/modules/setting';
 import DrawerHeader from '@/components/drawer-header/index.vue';
 
