@@ -1,18 +1,22 @@
 package dto
 
-import "time"
+import (
+	"time"
+)
 
 type PageContainer struct {
 	PageInfo
-	Name    string `json:"name"`
-	OrderBy string `json:"orderBy"`
-	Order   string `json:"order"`
-	Filters string `json:"filters"`
+	Name            string `json:"name"`
+	State           string `json:"state" validate:"required,oneof=all created running paused restarting removing exited dead"`
+	OrderBy         string `json:"orderBy" validate:"required,oneof=name state created_at"`
+	Order           string `json:"order" validate:"required,oneof=null ascending descending"`
+	Filters         string `json:"filters"`
+	ExcludeAppStore bool   `json:"excludeAppStore"`
 }
 
 type InspectReq struct {
-	ID   string `json:"id"`
-	Type string `json:"type"`
+	ID   string `json:"id" validate:"required"`
+	Type string `json:"type" validate:"required"`
 }
 
 type ContainerInfo struct {
@@ -29,19 +33,25 @@ type ContainerInfo struct {
 
 	IsFromApp     bool `json:"isFromApp"`
 	IsFromCompose bool `json:"isFromCompose"`
+
+	AppName        string   `json:"appName"`
+	AppInstallName string   `json:"appInstallName"`
+	Websites       []string `json:"websites"`
 }
 
 type ResourceLimit struct {
-	CPU    int `json:"cpu"`
-	Memory int `json:"memory"`
+	CPU    int    `json:"cpu"`
+	Memory uint64 `json:"memory"`
 }
 
 type ContainerOperate struct {
 	ContainerID     string         `json:"containerID"`
 	ForcePull       bool           `json:"forcePull"`
-	Name            string         `json:"name"`
-	Image           string         `json:"image"`
+	Name            string         `json:"name" validate:"required"`
+	Image           string         `json:"image" validate:"required"`
 	Network         string         `json:"network"`
+	Ipv4            string         `json:"ipv4"`
+	Ipv6            string         `json:"ipv6"`
 	PublishAllPorts bool           `json:"publishAllPorts"`
 	ExposedPorts    []PortHelper   `json:"exposedPorts"`
 	Tty             bool           `json:"tty"`
@@ -51,6 +61,7 @@ type ContainerOperate struct {
 	CPUShares       int64          `json:"cpuShares"`
 	NanoCPUs        float64        `json:"nanoCPUs"`
 	Memory          float64        `json:"memory"`
+	Privileged      bool           `json:"privileged"`
 	AutoRemove      bool           `json:"autoRemove"`
 	Volumes         []VolumeHelper `json:"volumes"`
 	Labels          []string       `json:"labels"`
@@ -91,6 +102,7 @@ type ContainerStats struct {
 }
 
 type VolumeHelper struct {
+	Type         string `json:"type"`
 	SourceDir    string `json:"sourceDir"`
 	ContainerDir string `json:"containerDir"`
 	Mode         string `json:"mode"`
@@ -103,13 +115,26 @@ type PortHelper struct {
 }
 
 type ContainerOperation struct {
-	Name      string `json:"name" validate:"required"`
-	Operation string `json:"operation" validate:"required,oneof=start stop restart kill pause unpause rename remove"`
-	NewName   string `json:"newName"`
+	Names     []string `json:"names" validate:"required"`
+	Operation string   `json:"operation" validate:"required,oneof=up start stop restart kill pause unpause remove"`
+}
+
+type ContainerRename struct {
+	Name    string `json:"name" validate:"required"`
+	NewName string `json:"newName" validate:"required"`
+}
+
+type ContainerCommit struct {
+	ContainerId   string `json:"containerID" validate:"required"`
+	ContainerName string `json:"containerName"`
+	NewImageName  string `json:"newImageName"`
+	Comment       string `json:"comment"`
+	Author        string `json:"author"`
+	Pause         bool   `json:"pause"`
 }
 
 type ContainerPrune struct {
-	PruneType  string `json:"pruneType" validate:"required,oneof=container image volume network"`
+	PruneType  string `json:"pruneType" validate:"required,oneof=container image volume network buildcache"`
 	WithTagAll bool   `json:"withTagAll"`
 }
 
@@ -130,13 +155,21 @@ type Network struct {
 	Attachable bool      `json:"attachable"`
 }
 type NetworkCreate struct {
-	Name    string   `json:"name"`
-	Driver  string   `json:"driver"`
-	Options []string `json:"options"`
-	Subnet  string   `json:"subnet"`
-	Gateway string   `json:"gateway"`
-	IPRange string   `json:"ipRange"`
-	Labels  []string `json:"labels"`
+	Name       string          `json:"name" validate:"required"`
+	Driver     string          `json:"driver" validate:"required"`
+	Options    []string        `json:"options"`
+	Ipv4       bool            `json:"ipv4"`
+	Subnet     string          `json:"subnet"`
+	Gateway    string          `json:"gateway"`
+	IPRange    string          `json:"ipRange"`
+	AuxAddress []SettingUpdate `json:"auxAddress"`
+
+	Ipv6         bool            `json:"ipv6"`
+	SubnetV6     string          `json:"subnetV6"`
+	GatewayV6    string          `json:"gatewayV6"`
+	IPRangeV6    string          `json:"ipRangeV6"`
+	AuxAddressV6 []SettingUpdate `json:"auxAddressV6"`
+	Labels       []string        `json:"labels"`
 }
 
 type Volume struct {
@@ -147,13 +180,14 @@ type Volume struct {
 	CreatedAt  time.Time `json:"createdAt"`
 }
 type VolumeCreate struct {
-	Name    string   `json:"name"`
-	Driver  string   `json:"driver"`
+	Name    string   `json:"name" validate:"required"`
+	Driver  string   `json:"driver" validate:"required"`
 	Options []string `json:"options"`
 	Labels  []string `json:"labels"`
 }
 
 type BatchDelete struct {
+	Force bool     `json:"force"`
 	Names []string `json:"names" validate:"required"`
 }
 
@@ -166,6 +200,7 @@ type ComposeInfo struct {
 	Workdir         string             `json:"workdir"`
 	Path            string             `json:"path"`
 	Containers      []ComposeContainer `json:"containers"`
+	Env             []string           `json:"env"`
 }
 type ComposeContainer struct {
 	ContainerID string `json:"containerID"`
@@ -174,20 +209,29 @@ type ComposeContainer struct {
 	State       string `json:"state"`
 }
 type ComposeCreate struct {
-	Name     string `json:"name"`
-	From     string `json:"from" validate:"required,oneof=edit path template"`
-	File     string `json:"file"`
-	Path     string `json:"path"`
-	Template uint   `json:"template"`
+	Name     string   `json:"name"`
+	From     string   `json:"from" validate:"required,oneof=edit path template"`
+	File     string   `json:"file"`
+	Path     string   `json:"path"`
+	Template uint     `json:"template"`
+	Env      []string `json:"env"`
 }
 type ComposeOperation struct {
 	Name      string `json:"name" validate:"required"`
-	Path      string `json:"path" validate:"required"`
-	Operation string `json:"operation" validate:"required,oneof=start stop down"`
+	Path      string `json:"path"`
+	Operation string `json:"operation" validate:"required,oneof=up start stop down delete"`
 	WithFile  bool   `json:"withFile"`
 }
 type ComposeUpdate struct {
-	Name    string `json:"name" validate:"required"`
-	Path    string `json:"path" validate:"required"`
-	Content string `json:"content" validate:"required"`
+	Name    string   `json:"name" validate:"required"`
+	Path    string   `json:"path" validate:"required"`
+	Content string   `json:"content" validate:"required"`
+	Env     []string `json:"env"`
+}
+
+type ContainerLog struct {
+	Container     string `json:"container" validate:"required"`
+	Since         string `json:"since"`
+	Tail          uint   `json:"tail"`
+	ContainerType string `json:"containerType"`
 }

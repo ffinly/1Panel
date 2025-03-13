@@ -1,48 +1,44 @@
 <template>
-    <el-drawer v-model="drawerVisible" :destroy-on-close="true" :close-on-click-modal="false" size="50%">
+    <el-drawer
+        v-model="drawerVisible"
+        :destroy-on-close="true"
+        :close-on-click-modal="false"
+        :close-on-press-escape="false"
+        size="50%"
+    >
         <template #header>
-            <DrawerHeader :header="$t('commons.button.upgrade')" :resource="form.name" :back="handleClose" />
+            <DrawerHeader :header="$t('commons.button.upgrade')" :resource="form.containerName" :back="handleClose" />
         </template>
 
         <el-row v-loading="loading">
             <el-col :span="22" :offset="1">
                 <el-alert
-                    v-if="form.fromApp"
                     :title="$t('container.appHelper')"
+                    v-if="form.fromApp"
                     class="common-prompt"
                     :closable="false"
-                    type="error"
+                    type="warning"
                 />
-                <el-form @submit.prevent ref="formRef" v-loading="loading" :model="form" label-position="top">
+                <el-form @submit.prevent ref="formRef" :model="form" label-position="top">
                     <el-form-item :label="$t('container.oldImage')" prop="oldImage">
-                        <el-tooltip placement="top-start" :content="form.imageName" v-if="form.imageName.length > 50">
-                            <el-tag>{{ form.imageName.substring(0, 50) }}...:{{ form.oldTag }}</el-tag>
+                        <el-tooltip
+                            placement="top-start"
+                            :content="form.oldImageName"
+                            v-if="form.oldImageName.length > 50"
+                        >
+                            <el-tag>{{ form.oldImageName.substring(0, 50) }}...</el-tag>
                         </el-tooltip>
-                        <el-tag v-else>{{ form.imageName }}:{{ form.oldTag }}</el-tag>
+                        <el-tag v-else>{{ form.oldImageName }}</el-tag>
                     </el-form-item>
-                    <el-form-item prop="newTag" :rules="Rules.imageName">
+                    <el-form-item prop="newImageName" :rules="Rules.imageName">
                         <template #label>
-                            <el-tooltip
-                                placement="top-start"
-                                :content="form.imageName"
-                                v-if="form.imageName.length > 40"
-                            >
-                                <span>
-                                    {{ $t('container.targetImage') + ' (' + form.imageName.substring(0, 40) + '...)' }}
-                                </span>
-                            </el-tooltip>
-                            <span v-else>
-                                {{ $t('container.targetImage') + ' (' + form.imageName + ')' }}
+                            {{ $t('container.targetImage') }}
+                            <span v-if="!form.hasName">
+                                {{ ' (' + $t('container.imageLoadErr') + ')' }}
                             </span>
                         </template>
-                        <el-input v-model="form.newTag" :placeholder="$t('container.targetImageHelper')" />
+                        <el-input v-model="form.newImageName" />
                         <span class="input-help">{{ $t('container.upgradeHelper') }}</span>
-                    </el-form-item>
-                    <el-form-item prop="ignoreCompare">
-                        <el-checkbox v-model="form.ignoreCompare">
-                            {{ $t('container.ignoreCompare') }}
-                        </el-checkbox>
-                        <span class="input-help">{{ $t('container.ignoreCompareHelper') }}</span>
                     </el-form-item>
                     <el-form-item prop="forcePull">
                         <el-checkbox v-model="form.forcePull">
@@ -70,7 +66,7 @@
 import { upgradeContainer } from '@/api/modules/container';
 import { Rules } from '@/global/form-rules';
 import i18n from '@/lang';
-import { MsgSuccess, MsgWarning } from '@/utils/message';
+import { MsgSuccess } from '@/utils/message';
 import { ElForm } from 'element-plus';
 import { reactive, ref } from 'vue';
 import DrawerHeader from '@/components/drawer-header/index.vue';
@@ -78,14 +74,13 @@ import DrawerHeader from '@/components/drawer-header/index.vue';
 const loading = ref(false);
 
 const form = reactive({
-    name: '',
-    imageName: '',
-    oldTag: '',
-    newTag: '',
+    containerName: '',
+    oldImageName: '',
+    newImageName: '',
+    hasName: true,
+
     fromApp: false,
     forcePull: false,
-
-    ignoreCompare: false,
 });
 
 const formRef = ref<FormInstance>();
@@ -99,12 +94,15 @@ interface DialogProps {
     fromApp: boolean;
 }
 const acceptParams = (props: DialogProps): void => {
-    form.name = props.container;
-    form.imageName = props.image.indexOf(':') !== -1 ? props.image.split(':')[0] : props.image;
-    form.oldTag = props.image.indexOf(':') !== -1 ? props.image.split(':')[1] : 'latest';
-    form.newTag = form.oldTag;
+    form.containerName = props.container;
+    form.oldImageName = props.image;
     form.fromApp = props.fromApp;
-    form.ignoreCompare = false;
+    form.hasName = props.image.indexOf('sha256:') === -1;
+    if (form.hasName) {
+        form.newImageName = props.image;
+    } else {
+        form.newImageName = '';
+    }
     drawerVisible.value = true;
 };
 const emit = defineEmits<{ (e: 'search'): void }>();
@@ -113,16 +111,12 @@ const onSubmit = async (formEl: FormInstance | undefined) => {
     if (!formEl) return;
     formEl.validate(async (valid) => {
         if (!valid) return;
-        if (!form.ignoreCompare && !compareVersion(form.newTag, form.oldTag)) {
-            MsgWarning(i18n.global.t('container.upgradeWarning'));
-            return;
-        }
         ElMessageBox.confirm(i18n.global.t('container.upgradeWarning2'), i18n.global.t('commons.button.upgrade'), {
             confirmButtonText: i18n.global.t('commons.button.confirm'),
             cancelButtonText: i18n.global.t('commons.button.cancel'),
         }).then(async () => {
             loading.value = true;
-            await upgradeContainer(form.name, form.imageName + ':' + form.newTag, form.forcePull)
+            await upgradeContainer(form.containerName, form.newImageName, form.forcePull)
                 .then(() => {
                     loading.value = false;
                     emit('search');
@@ -139,33 +133,6 @@ const handleClose = async () => {
     drawerVisible.value = false;
     emit('search');
 };
-
-function compareVersion(vNew, vOld) {
-    if (vNew === 'latest') {
-        return true;
-    }
-    let v1 = vNew
-        .replace('-', '.')
-        .replace(/[^\d.]/g, '')
-        .split('.');
-    let v2 = vOld
-        .replace('-', '.')
-        .replace(/[^\d.]/g, '')
-        .split('.');
-
-    for (let i = 0; i < Math.max(v1.length, v2.length); i++) {
-        let num1 = parseInt(v1[i] || 0);
-        let num2 = parseInt(v2[i] || 0);
-
-        if (num1 > num2) {
-            return true;
-        } else if (num1 < num2) {
-            return false;
-        }
-    }
-
-    return false;
-}
 
 defineExpose({
     acceptParams,

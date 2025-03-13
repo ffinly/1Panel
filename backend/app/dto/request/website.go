@@ -7,8 +7,8 @@ import (
 type WebsiteSearch struct {
 	dto.PageInfo
 	Name           string `json:"name"`
-	OrderBy        string `json:"orderBy"`
-	Order          string `json:"order"`
+	OrderBy        string `json:"orderBy" validate:"required,oneof=primary_domain type status created_at expire_date"`
+	Order          string `json:"order" validate:"required,oneof=null ascending descending"`
 	WebsiteGroupID uint   `json:"websiteGroupId"`
 }
 
@@ -26,6 +26,9 @@ type WebsiteCreate struct {
 	AppInstall   NewAppInstall `json:"appInstall"`
 	AppID        uint          `json:"appID"`
 	AppInstallID uint          `json:"appInstallID"`
+
+	FtpUser     string `json:"ftpUser"`
+	FtpPassword string `json:"ftpPassword"`
 
 	RuntimeID uint `json:"runtimeID"`
 	RuntimeConfig
@@ -45,14 +48,14 @@ type NewAppInstall struct {
 }
 
 type WebsiteInstallCheckReq struct {
-	InstallIds []uint `json:"InstallIds" validate:"required"`
+	InstallIds []uint `json:"InstallIds"`
 }
 
 type WebsiteUpdate struct {
 	ID             uint   `json:"id" validate:"required"`
 	PrimaryDomain  string `json:"primaryDomain" validate:"required"`
 	Remark         string `json:"remark"`
-	WebsiteGroupID uint   `json:"webSiteGroupID" validate:"required"`
+	WebsiteGroupID uint   `json:"webSiteGroupID"`
 	ExpireDate     string `json:"expireDate"`
 	IPV6           bool   `json:"IPV6"`
 }
@@ -69,22 +72,10 @@ type WebsiteOp struct {
 	Operate string `json:"operate"`
 }
 
-type WebsiteWafReq struct {
-	WebsiteID uint   `json:"websiteId" validate:"required"`
-	Key       string `json:"key" validate:"required"`
-	Rule      string `json:"rule" validate:"required"`
-}
-
 type WebsiteRedirectUpdate struct {
 	WebsiteID uint   `json:"websiteId" validate:"required"`
 	Key       string `json:"key" validate:"required"`
-	Enable    bool   `json:"enable" validate:"required"`
-}
-
-type WebsiteWafUpdate struct {
-	WebsiteID uint   `json:"websiteId" validate:"required"`
-	Key       string `json:"key" validate:"required"`
-	Enable    bool   `json:"enable" validate:"required"`
+	Enable    bool   `json:"enable"`
 }
 
 type WebsiteRecover struct {
@@ -111,9 +102,8 @@ type WebsiteGroupUpdate struct {
 }
 
 type WebsiteDomainCreate struct {
-	WebsiteID uint   `json:"websiteId" validate:"required"`
-	Port      int    `json:"port" validate:"required"`
-	Domain    string `json:"domain" validate:"required"`
+	WebsiteID uint   `json:"websiteID" validate:"required"`
+	Domains   string `json:"domains" validate:"required"`
 }
 
 type WebsiteDomainDelete struct {
@@ -122,7 +112,7 @@ type WebsiteDomainDelete struct {
 
 type WebsiteHTTPSOp struct {
 	WebsiteID       uint     `json:"websiteId" validate:"required"`
-	Enable          bool     `json:"enable" validate:"required"`
+	Enable          bool     `json:"enable"`
 	WebsiteSSLID    uint     `json:"websiteSSLId"`
 	Type            string   `json:"type"  validate:"oneof=existed auto manual"`
 	PrivateKey      string   `json:"privateKey"`
@@ -133,6 +123,7 @@ type WebsiteHTTPSOp struct {
 	HttpConfig      string   `json:"httpConfig"  validate:"oneof=HTTPSOnly HTTPAlso HTTPToHTTPS"`
 	SSLProtocol     []string `json:"SSLProtocol"`
 	Algorithm       string   `json:"algorithm"`
+	Hsts            bool     `json:"hsts"`
 }
 
 type WebsiteNginxUpdate struct {
@@ -149,7 +140,7 @@ type WebsiteLogReq struct {
 }
 
 type WebsiteDefaultUpdate struct {
-	ID uint `json:"id" validate:"required"`
+	ID uint `json:"id"`
 }
 
 type WebsitePHPConfigUpdate struct {
@@ -169,7 +160,7 @@ type WebsitePHPFileUpdate struct {
 type WebsitePHPVersionReq struct {
 	WebsiteID    uint `json:"websiteID" validate:"required"`
 	RuntimeID    uint `json:"runtimeID" validate:"required"`
-	RetainConfig bool `json:"retainConfig" validate:"required"`
+	RetainConfig bool `json:"retainConfig" `
 }
 
 type WebsiteUpdateDir struct {
@@ -184,20 +175,27 @@ type WebsiteUpdateDirPermission struct {
 }
 
 type WebsiteProxyConfig struct {
-	ID        uint              `json:"id" validate:"required"`
-	Operate   string            `json:"operate" validate:"required"`
-	Enable    bool              `json:"enable"  validate:"required"`
-	Cache     bool              `json:"cache"  validate:"required"`
-	CacheTime int               `json:"cacheTime"  validate:"required"`
-	CacheUnit string            `json:"cacheUnit" validate:"required"`
-	Name      string            `json:"name" validate:"required"`
-	Modifier  string            `json:"modifier" validate:"required"`
-	Match     string            `json:"match" validate:"required"`
-	ProxyPass string            `json:"proxyPass" validate:"required"`
-	ProxyHost string            `json:"proxyHost" validate:"required"`
-	Content   string            `json:"content"`
-	FilePath  string            `json:"filePath"`
-	Replaces  map[string]string `json:"replaces"`
+	ID           uint              `json:"id" validate:"required"`
+	Operate      string            `json:"operate" validate:"required"`
+	Enable       bool              `json:"enable" `
+	Cache        bool              `json:"cache" `
+	CacheTime    int               `json:"cacheTime"  `
+	CacheUnit    string            `json:"cacheUnit"`
+	Name         string            `json:"name" validate:"required"`
+	Modifier     string            `json:"modifier"`
+	Match        string            `json:"match" validate:"required"`
+	ProxyPass    string            `json:"proxyPass" validate:"required"`
+	ProxyHost    string            `json:"proxyHost" validate:"required"`
+	Content      string            `json:"content"`
+	FilePath     string            `json:"filePath"`
+	Replaces     map[string]string `json:"replaces"`
+	SNI          bool              `json:"sni"`
+	ProxySSLName string            `json:"proxySSLName"`
+}
+
+type WebsiteProxyDel struct {
+	ID   uint   `json:"id" validate:"required"`
+	Name string `json:"name" validate:"required"`
 }
 
 type WebsiteProxyReq struct {
@@ -208,12 +206,21 @@ type WebsiteRedirectReq struct {
 	WebsiteID uint `json:"websiteId" validate:"required"`
 }
 
-type WebsiteWafFileUpdate struct {
-	WebsiteID uint   `json:"websiteID" validate:"required"`
-	Content   string `json:"content" validate:"required"`
-	Type      string `json:"type" validate:"required,oneof=cc ip_white ip_block url_white url_block cookie_block args_check post_check ua_check file_ext_block"`
-}
-
 type WebsiteCommonReq struct {
 	ID uint `json:"id" validate:"required"`
+}
+
+type WafWebsite struct {
+	Key     string   `json:"key"`
+	Domains []string `json:"domains"`
+	Host    []string `json:"host"`
+}
+
+type WebsiteHtmlReq struct {
+	Type string `json:"type" validate:"required"`
+}
+
+type WebsiteHtmlUpdate struct {
+	Type    string `json:"type" validate:"required"`
+	Content string `json:"content" validate:"required"`
 }

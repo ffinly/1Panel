@@ -16,7 +16,7 @@ type RuleSearch struct {
 }
 
 type FirewallOperation struct {
-	Operation string `json:"operation" validate:"required,oneof=start stop disablePing enablePing"`
+	Operation string `json:"operation" validate:"required,oneof=start stop restart disablePing enablePing"`
 }
 
 type PortRuleOperate struct {
@@ -27,6 +27,18 @@ type PortRuleOperate struct {
 	Strategy  string `json:"strategy" validate:"required,oneof=accept drop"`
 
 	Description string `json:"description"`
+}
+
+type ForwardRuleOperate struct {
+	ForceDelete bool `json:"forceDelete"`
+	Rules       []struct {
+		Operation  string `json:"operation" validate:"required,oneof=add remove"`
+		Num        string `json:"num"`
+		Protocol   string `json:"protocol" validate:"required,oneof=tcp udp tcp/udp"`
+		Port       string `json:"port" validate:"required"`
+		TargetIP   string `json:"targetIP"`
+		TargetPort string `json:"targetPort" validate:"required"`
+	} `json:"rules"`
 }
 
 type UpdateFirewallDescription struct {

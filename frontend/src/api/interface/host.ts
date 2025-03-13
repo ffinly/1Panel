@@ -74,12 +74,17 @@ export namespace Host {
     export interface RuleInfo extends ReqPage {
         family: string;
         address: string;
+        destination: string;
         port: string;
+        srcPort: string;
+        destPort: string;
         protocol: string;
         strategy: string;
 
         usedStatus: string;
         description: string;
+
+        [key: string]: any;
     }
     export interface UpdateDescription {
         address: string;
@@ -96,6 +101,13 @@ export namespace Host {
         protocol: string;
         strategy: string;
         description: string;
+    }
+    export interface RuleForward {
+        operation: string;
+        protocol: string;
+        port: string;
+        targetIP: string;
+        targetPort: string;
     }
     export interface RuleIP {
         operation: string;
@@ -116,7 +128,20 @@ export namespace Host {
         rules: Array<RulePort>;
     }
 
+    export interface MonitorData {
+        param: string;
+        date: Array<Date>;
+        value: Array<any>;
+    }
+    export interface MonitorSearch {
+        param: string;
+        info: string;
+        startTime: Date;
+        endTime: Date;
+    }
+
     export interface SSHInfo {
+        autoStart: boolean;
         status: string;
         message: string;
         port: string;
@@ -127,6 +152,11 @@ export namespace Host {
         primaryKey: string;
         permitRootLogin: string;
         useDNS: string;
+    }
+    export interface SSHUpdate {
+        key: string;
+        oldValue: string;
+        newValue: string;
     }
     export interface SSHGenerate {
         encryptionMode: string;

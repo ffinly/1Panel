@@ -4,18 +4,19 @@
 
         <div class="content-container__search">
             <el-card>
-                <span style="font-size: 14px">{{ $t('monitor.globalFilter') }}</span>
-                <el-date-picker
-                    @change="searchGlobal()"
-                    v-model="timeRangeGlobal"
-                    type="datetimerange"
-                    :range-separator="$t('commons.search.timeRange')"
-                    :start-placeholder="$t('commons.search.timeStart')"
-                    :end-placeholder="$t('commons.search.timeEnd')"
-                    :shortcuts="shortcuts"
-                    style="max-width: 360px; width: 100%; margin-left: 10px"
-                    :size="mobile ? 'small' : 'default'"
-                ></el-date-picker>
+                <div :class="mobile ? 'flx-wrap' : 'flx-justify-between'">
+                    <el-date-picker
+                        @change="searchGlobal()"
+                        v-model="timeRangeGlobal"
+                        type="datetimerange"
+                        :range-separator="$t('commons.search.timeRange')"
+                        :start-placeholder="$t('commons.search.timeStart')"
+                        :end-placeholder="$t('commons.search.timeEnd')"
+                        :shortcuts="shortcuts"
+                        style="max-width: 360px; width: 100%"
+                        :size="mobile ? 'small' : 'default'"
+                    ></el-date-picker>
+                </div>
             </el-card>
         </div>
         <el-row :gutter="20" style="margin-top: 20px">
@@ -117,7 +118,7 @@
                 <el-card style="overflow: inherit">
                     <template #header>
                         <div :class="mobile ? 'flx-wrap' : 'flx-justify-between'">
-                            <span class="title">{{ $t('monitor.disk') }} IO</span>
+                            <span class="title">{{ $t('monitor.disk') }} I/O</span>
                             <el-date-picker
                                 @change="search('io')"
                                 v-model="timeRangeIO"
@@ -148,7 +149,7 @@
                     <template #header>
                         <div :class="mobile ? 'flx-wrap' : 'flx-justify-between'">
                             <div>
-                                <span class="title">{{ $t('monitor.network') }} IO:</span>
+                                <span class="title">{{ $t('monitor.network') }}{{ $t('commons.colon') }}</span>
                                 <el-popover placement="bottom" :width="200" trigger="click">
                                     <el-select @change="search('network')" v-model="networkChoose">
                                         <template #prefix>{{ $t('monitor.networkCard') }}</template>
@@ -202,12 +203,13 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue';
-import { loadMonitor, getNetworkOptions } from '@/api/modules/monitor';
-import { Monitor } from '@/api/interface/monitor';
+import { loadMonitor, getNetworkOptions } from '@/api/modules/host';
 import { computeSizeFromKBs, dateFormatWithoutYear } from '@/utils/util';
 import i18n from '@/lang';
 import MonitorRouter from '@/views/host/monitor/index.vue';
 import { GlobalStore } from '@/store';
+import { shortcuts } from '@/utils/shortcuts';
+import { Host } from '@/api/interface/host';
 
 const globalStore = GlobalStore();
 
@@ -227,51 +229,8 @@ const networkChoose = ref();
 const netOptions = ref();
 const chartsOption = ref({ loadLoadChart: null, loadCPUChart: null, loadMemoryChart: null, loadNetworkChart: null });
 
-const shortcuts = [
-    {
-        text: i18n.global.t('monitor.today'),
-        value: () => {
-            const end = new Date();
-            const start = new Date(new Date().setHours(0, 0, 0, 0));
-            return [start, end];
-        },
-    },
-    {
-        text: i18n.global.t('monitor.yesterday'),
-        value: () => {
-            const yesterday = new Date(new Date().getTime() - 3600 * 1000 * 24 * 1);
-            const end = new Date(yesterday.setHours(23, 59, 59, 999));
-            const start = new Date(yesterday.setHours(0, 0, 0, 0));
-            return [start, end];
-        },
-    },
-    {
-        text: i18n.global.t('monitor.lastNDay', [3]),
-        value: () => {
-            const start = new Date(new Date().getTime() - 3600 * 1000 * 24 * 3);
-            const end = new Date();
-            return [start, end];
-        },
-    },
-    {
-        text: i18n.global.t('monitor.lastNDay', [7]),
-        value: () => {
-            const start = new Date(new Date().getTime() - 3600 * 1000 * 24 * 7);
-            const end = new Date();
-            return [start, end];
-        },
-    },
-    {
-        text: i18n.global.t('monitor.lastNDay', [30]),
-        value: () => {
-            const start = new Date(new Date().getTime() - 3600 * 1000 * 24 * 30);
-            const end = new Date();
-            return [start, end];
-        },
-    },
-];
 const searchTime = ref();
-const searchInfo = reactive<Monitor.MonitorSearch>({
+const searchInfo = reactive<Host.MonitorSearch>({
     param: '',
     info: '',
     startTime: new Date(new Date().setHours(0, 0, 0, 0)),
@@ -334,8 +293,8 @@ const search = async (param: string) => {
                     });
                     cpuData = cpuData.length === 0 ? loadEmptyData() : cpuData;
                     chartsOption.value['loadCPUChart'] = {
-                        xDatas: baseDate,
-                        yDatas: [
+                        xData: baseDate,
+                        yData: [
                             {
                                 name: 'CPU',
                                 data: cpuData,
@@ -351,8 +310,8 @@ const search = async (param: string) => {
                     });
                     memoryData = memoryData.length === 0 ? loadEmptyData() : memoryData;
                     chartsOption.value['loadMemoryChart'] = {
-                        xDatas: baseDate,
-                        yDatas: [
+                        xData: baseDate,
+                        yData: [
                             {
                                 name: i18n.global.t('monitor.memory'),
                                 data: memoryData,
@@ -384,8 +343,8 @@ const search = async (param: string) => {
                 networkOut = networkOut.length === 0 ? loadEmptyData() : networkOut;
 
                 chartsOption.value['loadNetworkChart'] = {
-                    xDatas: networkDate,
-                    yDatas: [
+                    xData: networkDate,
+                    yData: [
                         {
                             name: i18n.global.t('monitor.up'),
                             data: networkUp,
@@ -414,7 +373,7 @@ const loadNetworkOptions = async () => {
     search('all');
 };
 
-function initLoadCharts(item: Monitor.MonitorData) {
+function initLoadCharts(item: Host.MonitorData) {
     let itemLoadDate = item.date.length === 0 ? loadEmptyDate(timeRangeLoad.value) : item.date;
     let loadDate = itemLoadDate.map(function (item: any) {
         return dateFormatWithoutYear(item);
@@ -436,18 +395,18 @@ function initLoadCharts(item: Monitor.MonitorData) {
     });
     loadUsage = loadUsage.length === 0 ? loadEmptyData() : loadUsage;
     chartsOption.value['loadLoadChart'] = {
-        xDatas: loadDate,
-        yDatas: [
+        xData: loadDate,
+        yData: [
             {
-                name: '1 ' + i18n.global.t('commons.units.minute'),
+                name: '1 ' + i18n.global.t('commons.units.minute', 1),
                 data: load1Data,
             },
             {
-                name: '5 ' + i18n.global.t('commons.units.minute'),
+                name: '5 ' + i18n.global.t('commons.units.minute', 5),
                 data: load5Data,
             },
             {
-                name: '15 ' + i18n.global.t('commons.units.minute'),
+                name: '15 ' + i18n.global.t('commons.units.minute', 15),
                 data: load15Data,
             },
             {
@@ -457,7 +416,7 @@ function initLoadCharts(item: Monitor.MonitorData) {
             },
         ],
         yAxis: [
-            { type: 'value', name: i18n.global.t('monitor.loadDetail') + ' ( % )' },
+            { type: 'value', name: i18n.global.t('monitor.loadDetail') },
             {
                 type: 'value',
                 name: i18n.global.t('monitor.resourceUsage') + ' ( % )',
@@ -466,11 +425,26 @@ function initLoadCharts(item: Monitor.MonitorData) {
             },
         ],
         grid: mobile.value ? { left: '15%', right: '15%', bottom: '20%' } : null,
-        formatStr: '%',
+        tooltip: {
+            trigger: 'axis',
+            formatter: function (datas: any) {
+                let res = datas[0].name + '<br/>';
+                for (const item of datas) {
+                    if (item.seriesName === i18n.global.t('monitor.resourceUsage')) {
+                        res +=
+                            item.marker + ' ' + item.seriesName + i18n.global.t('commons.colon') + item.data + '%<br/>';
+                    } else {
+                        res +=
+                            item.marker + ' ' + item.seriesName + i18n.global.t('commons.colon') + item.data + '<br/>';
+                    }
+                }
+                return res;
+            },
+        },
     };
 }
 
-function initIOCharts(item: Monitor.MonitorData) {
+function initIOCharts(item: Host.MonitorData) {
     let itemIODate = item.date?.length === 0 ? loadEmptyDate(timeRangeIO.value) : item.date;
     let ioDate = itemIODate.map(function (item: any) {
         return dateFormatWithoutYear(item);
@@ -492,8 +466,8 @@ function initIOCharts(item: Monitor.MonitorData) {
     });
     ioTime = ioTime.length === 0 ? loadEmptyData() : ioTime;
     chartsOption.value['loadIOChart'] = {
-        xDatas: ioDate,
-        yDatas: [
+        xData: ioDate,
+        yData: [
             {
                 name: i18n.global.t('monitor.read'),
                 data: ioRead,
@@ -522,14 +496,20 @@ function initIOCharts(item: Monitor.MonitorData) {
                         item.seriesName === i18n.global.t('monitor.read') ||
                         item.seriesName === i18n.global.t('monitor.write')
                     ) {
-                        res += item.marker + ' ' + item.seriesName + '：' + computeSizeFromKBs(item.data) + '<br/>';
+                        res +=
+                            item.marker +
+                            ' ' +
+                            item.seriesName +
+                            i18n.global.t('commons.colon') +
+                            computeSizeFromKBs(item.data) +
+                            '<br/>';
                     }
                     if (item.seriesName === i18n.global.t('monitor.readWriteCount')) {
                         res +=
                             item.marker +
                             ' ' +
                             item.seriesName +
-                            '：' +
+                            i18n.global.t('commons.colon') +
                             item.data +
                             ' ' +
                             i18n.global.t('commons.units.time') +
@@ -537,7 +517,14 @@ function initIOCharts(item: Monitor.MonitorData) {
                             '<br/>';
                     }
                     if (item.seriesName === i18n.global.t('monitor.readWriteTime')) {
-                        res += item.marker + ' ' + item.seriesName + '：' + item.data + ' ms' + '<br/>';
+                        res +=
+                            item.marker +
+                            ' ' +
+                            item.seriesName +
+                            i18n.global.t('commons.colon') +
+                            item.data +
+                            ' ms' +
+                            '<br/>';
                     }
                 }
                 return res;

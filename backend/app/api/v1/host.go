@@ -4,28 +4,22 @@ import (
 	"github.com/1Panel-dev/1Panel/backend/app/api/v1/helper"
 	"github.com/1Panel-dev/1Panel/backend/app/dto"
 	"github.com/1Panel-dev/1Panel/backend/constant"
-	"github.com/1Panel-dev/1Panel/backend/global"
 	"github.com/1Panel-dev/1Panel/backend/utils/encrypt"
 	"github.com/gin-gonic/gin"
 )
 
 // @Tags Host
 // @Summary Create host
-// @Description 创建主机
 // @Accept json
 // @Param request body dto.HostOperate true "request"
-// @Success 200
+// @Success 200 {object} dto.HostInfo
 // @Security ApiKeyAuth
+// @Security Timestamp
 // @Router /hosts [post]
 // @x-panel-log {"bodyKeys":["name","addr"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"创建主机 [name][addr]","formatEN":"create host [name][addr]"}
 func (b *BaseApi) CreateHost(c *gin.Context) {
 	var req dto.HostOperate
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 
@@ -39,20 +33,15 @@ func (b *BaseApi) CreateHost(c *gin.Context) {
 
 // @Tags Host
 // @Summary Test host conn by info
-// @Description 测试主机连接
 // @Accept json
 // @Param request body dto.HostConnTest true "request"
-// @Success 200
+// @Success 200 {boolean} connStatus
 // @Security ApiKeyAuth
+// @Security Timestamp
 // @Router /hosts/test/byinfo [post]
 func (b *BaseApi) TestByInfo(c *gin.Context) {
 	var req dto.HostConnTest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 
@@ -62,12 +51,12 @@ func (b *BaseApi) TestByInfo(c *gin.Context) {
 
 // @Tags Host
 // @Summary Test host conn by host id
-// @Description 测试主机连接
 // @Accept json
 // @Param id path integer true "request"
 // @Success 200 {boolean} connStatus
 // @Security ApiKeyAuth
-// @Router /hosts/test/byid/:id [post]
+// @Security Timestamp
+// @Router /hosts/test/byid/{id} [post]
 func (b *BaseApi) TestByID(c *gin.Context) {
 	id, err := helper.GetParamID(c)
 	if err != nil {
@@ -81,16 +70,15 @@ func (b *BaseApi) TestByID(c *gin.Context) {
 
 // @Tags Host
 // @Summary Load host tree
-// @Description 加载主机树
 // @Accept json
 // @Param request body dto.SearchForTree true "request"
 // @Success 200 {array} dto.HostTree
 // @Security ApiKeyAuth
+// @Security Timestamp
 // @Router /hosts/tree [post]
 func (b *BaseApi) HostTree(c *gin.Context) {
 	var req dto.SearchForTree
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBind(&req, c); err != nil {
 		return
 	}
 
@@ -105,16 +93,15 @@ func (b *BaseApi) HostTree(c *gin.Context) {
 
 // @Tags Host
 // @Summary Page host
-// @Description 获取主机列表分页
 // @Accept json
 // @Param request body dto.SearchHostWithPage true "request"
-// @Success 200 {array} dto.HostTree
+// @Success 200 {object} dto.PageResult
 // @Security ApiKeyAuth
+// @Security Timestamp
 // @Router /hosts/search [post]
 func (b *BaseApi) SearchHost(c *gin.Context) {
 	var req dto.SearchHostWithPage
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 
@@ -132,21 +119,16 @@ func (b *BaseApi) SearchHost(c *gin.Context) {
 
 // @Tags Host
 // @Summary Delete host
-// @Description 删除主机
 // @Accept json
 // @Param request body dto.BatchDeleteReq true "request"
 // @Success 200
 // @Security ApiKeyAuth
+// @Security Timestamp
 // @Router /hosts/del [post]
 // @x-panel-log {"bodyKeys":["ids"],"paramKeys":[],"BeforeFunctions":[{"input_column":"id","input_value":"ids","isList":true,"db":"hosts","output_column":"addr","output_value":"addrs"}],"formatZH":"删除主机 [addrs]","formatEN":"delete host [addrs]"}
 func (b *BaseApi) DeleteHost(c *gin.Context) {
 	var req dto.BatchDeleteReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 
@@ -159,23 +141,19 @@ func (b *BaseApi) DeleteHost(c *gin.Context) {
 
 // @Tags Host
 // @Summary Update host
-// @Description 更新主机
 // @Accept json
 // @Param request body dto.HostOperate true "request"
 // @Success 200
 // @Security ApiKeyAuth
+// @Security Timestamp
 // @Router /hosts/update [post]
 // @x-panel-log {"bodyKeys":["name","addr"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"更新主机信息 [name][addr]","formatEN":"update host [name][addr]"}
 func (b *BaseApi) UpdateHost(c *gin.Context) {
 	var req dto.HostOperate
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
+
 	var err error
 	if len(req.Password) != 0 && req.AuthMode == "password" {
 		req.Password, err = hostService.EncryptHost(req.Password)
@@ -229,21 +207,16 @@ func (b *BaseApi) UpdateHost(c *gin.Context) {
 
 // @Tags Host
 // @Summary Update host group
-// @Description 切换分组
 // @Accept json
 // @Param request body dto.ChangeHostGroup true "request"
 // @Success 200
 // @Security ApiKeyAuth
+// @Security Timestamp
 // @Router /hosts/update/group [post]
 // @x-panel-log {"bodyKeys":["id","group"],"paramKeys":[],"BeforeFunctions":[{"input_column":"id","input_value":"id","isList":false,"db":"hosts","output_column":"addr","output_value":"addr"}],"formatZH":"切换主机[addr]分组 => [group]","formatEN":"change host [addr] group => [group]"}
 func (b *BaseApi) UpdateHostGroup(c *gin.Context) {
 	var req dto.ChangeHostGroup
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 

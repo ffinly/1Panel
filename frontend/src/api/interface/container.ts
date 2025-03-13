@@ -2,12 +2,24 @@ import { ReqPage } from '.';
 
 export namespace Container {
     export interface ContainerOperate {
-        name: string;
+        names: Array<string>;
         operation: string;
+    }
+    export interface ContainerRename {
+        name: string;
         newName: string;
+    }
+    export interface ContainerCommit {
+        containerID: string;
+        containerName: string;
+        newImageName: string;
+        comment: string;
+        author: string;
+        pause: boolean;
     }
     export interface ContainerSearch extends ReqPage {
         name: string;
+        state: string;
         filters: string;
         orderBy: string;
         order: string;
@@ -23,6 +35,8 @@ export namespace Container {
         imageInput: boolean;
         forcePull: boolean;
         network: string;
+        ipv4: string;
+        ipv6: string;
         cmdStr: string;
         entrypointStr: string;
         memoryItem: number;
@@ -36,6 +50,7 @@ export namespace Container {
         cpuShares: number;
         memory: number;
         volumes: Array<Volume>;
+        privileged: boolean;
         autoRemove: boolean;
         labels: Array<string>;
         labelsStr: string;
@@ -51,10 +66,10 @@ export namespace Container {
         protocol: string;
     }
     export interface Volume {
+        type: string;
         sourceDir: string;
         containerDir: string;
         mode: string;
-        isVolume: boolean;
     }
     export interface ContainerInfo {
         containerID: string;
@@ -115,6 +130,7 @@ export namespace Container {
         name: string;
         tags: Array<string>;
         size: string;
+        isUsed: boolean;
     }
     export interface ImageBuild {
         from: string;
@@ -127,7 +143,6 @@ export namespace Container {
         imageName: string;
     }
     export interface ImageTag {
-        repoID: number;
         sourceID: string;
         targetName: string;
     }
@@ -226,6 +241,8 @@ export namespace Container {
         path: string;
         containers: Array<ComposeContainer>;
         expand: boolean;
+        envStr: string;
+        env: Array<string>;
     }
     export interface ComposeContainer {
         name: string;
@@ -239,8 +256,10 @@ export namespace Container {
         file: string;
         path: string;
         template: number;
+        env: Array<string>;
+        envStr: string;
     }
-    export interface ComposeOpration {
+    export interface ComposeOperation {
         name: string;
         operation: string;
         path: string;
@@ -250,6 +269,8 @@ export namespace Container {
         name: string;
         path: string;
         content: string;
+        env: Array<string>;
+        createdBy: string;
     }
 
     export interface TemplateCreate {
@@ -292,7 +313,20 @@ export namespace Container {
         liveRestore: boolean;
         iptables: boolean;
         cgroupDriver: string;
+
+        ipv6: boolean;
+        fixedCidrV6: string;
+        ip6Tables: boolean;
+        experimental: boolean;
+
         logMaxSize: string;
         logMaxFile: string;
+    }
+
+    export interface ContainerLogInfo {
+        container: string;
+        since: string;
+        tail: number;
+        containerType: string;
     }
 }

@@ -20,16 +20,15 @@ func (b *BaseApi) ProcessWs(c *gin.Context) {
 
 // @Tags Process
 // @Summary Stop Process
-// @Description 停止进程
 // @Param request body request.ProcessReq true "request"
 // @Success 200
 // @Security ApiKeyAuth
+// @Security Timestamp
 // @Router /process/stop [post]
 // @x-panel-log {"bodyKeys":["PID"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"结束进程 [PID]","formatEN":"结束进程 [PID]"}
 func (b *BaseApi) StopProcess(c *gin.Context) {
 	var req request.ProcessReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 	if err := processService.StopProcess(req); err != nil {

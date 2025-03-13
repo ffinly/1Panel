@@ -14,10 +14,11 @@ type LocalWsSession struct {
 	slave  *LocalCommand
 	wsConn *websocket.Conn
 
+	allowCtrlC bool
 	writeMutex sync.Mutex
 }
 
-func NewLocalWsSession(cols, rows int, wsConn *websocket.Conn, slave *LocalCommand) (*LocalWsSession, error) {
+func NewLocalWsSession(cols, rows int, wsConn *websocket.Conn, slave *LocalCommand, allowCtrlC bool) (*LocalWsSession, error) {
 	if err := slave.ResizeTerminal(cols, rows); err != nil {
 		global.LOG.Errorf("ssh pty change windows size failed, err: %v", err)
 	}
@@ -25,6 +26,8 @@ func NewLocalWsSession(cols, rows int, wsConn *websocket.Conn, slave *LocalComma
 	return &LocalWsSession{
 		slave:  slave,
 		wsConn: wsConn,
+
+		allowCtrlC: allowCtrlC,
 	}, nil
 }
 
@@ -50,6 +53,11 @@ func (sws *LocalWsSession) handleSlaveEvent(exitCh chan bool) {
 }
 
 func (sws *LocalWsSession) masterWrite(data []byte) error {
+	defer func() {
+		if r := recover(); r != nil {
+			global.LOG.Errorf("A panic occurred during write ws message to master, error message: %v", r)
+		}
+	}()
 	sws.writeMutex.Lock()
 	defer sws.writeMutex.Unlock()
 	wsData, err := json.Marshal(WsMsg{
@@ -67,6 +75,12 @@ func (sws *LocalWsSession) masterWrite(data []byte) error {
 }
 
 func (sws *LocalWsSession) receiveWsMsg(exitCh chan bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			setQuit(exitCh)
+			global.LOG.Errorf("A panic occurred during receive ws message, error message: %v", r)
+		}
+	}()
 	wsConn := sws.wsConn
 	defer setQuit(exitCh)
 	defer global.LOG.Debug("thread of receive ws msg has exited now")
@@ -94,9 +108,10 @@ func (sws *LocalWsSession) receiveWsMsg(exitCh chan bool) {
 				if err != nil {
 					global.LOG.Errorf("websock cmd string base64 decoding failed, err: %v", err)
 				}
-				sws.sendWebsocketInputCommandToSshSessionStdinPipe(decodeBytes)
+				if string(decodeBytes) != "\x03" || sws.allowCtrlC {
+					sws.sendWebsocketInputCommandToSshSessionStdinPipe(decodeBytes)
+				}
 			case WsMsgHeartbeat:
-				// 接收到心跳包后将心跳包原样返回，可以用于网络延迟检测等情况
 				err = wsConn.WriteMessage(websocket.TextMessage, wsData)
 				if err != nil {
 					global.LOG.Errorf("ssh sending heartbeat to webSocket failed, err: %v", err)

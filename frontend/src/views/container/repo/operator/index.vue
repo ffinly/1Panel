@@ -1,8 +1,14 @@
 <template>
-    <el-drawer v-model="drawerVisible" :destroy-on-close="true" :close-on-click-modal="false" size="30%">
+    <el-drawer
+        v-model="drawerVisible"
+        :destroy-on-close="true"
+        :close-on-click-modal="false"
+        :close-on-press-escape="false"
+        size="30%"
+    >
         <template #header>
             <DrawerHeader
-                :header="title + $t('container.repo')"
+                :header="title + $t('container.repo').toLowerCase()"
                 :resource="dialogData.rowData?.name"
                 :back="handleClose"
             />
@@ -26,8 +32,8 @@
                     </el-form-item>
                     <el-form-item :label="$t('container.auth')" prop="auth">
                         <el-radio-group v-model="dialogData.rowData!.auth">
-                            <el-radio :label="true">{{ $t('commons.true') }}</el-radio>
-                            <el-radio :label="false">{{ $t('commons.false') }}</el-radio>
+                            <el-radio :value="true">{{ $t('commons.true') }}</el-radio>
+                            <el-radio :value="false">{{ $t('commons.false') }}</el-radio>
                         </el-radio-group>
                     </el-form-item>
                     <el-form-item v-if="dialogData.rowData!.auth" :label="$t('commons.login.username')" prop="username">
@@ -111,7 +117,7 @@ const handleClose = () => {
 };
 const rules = reactive({
     name: [Rules.requiredInput, Rules.name],
-    downloadUrl: [Rules.illegal],
+    downloadUrl: [{ validator: validateDownloadUrl, trigger: 'blur' }, Rules.illegal],
     protocol: [Rules.requiredSelect],
     username: [Rules.illegal],
     password: [Rules.illegal],
@@ -120,6 +126,17 @@ const rules = reactive({
 
 type FormInstance = InstanceType<typeof ElForm>;
 const formRef = ref<FormInstance>();
+
+function validateDownloadUrl(rule: any, value: any, callback: any) {
+    if (value === '') {
+        callback();
+    }
+    const pattern = /^(http:\/\/|https:\/\/)/i;
+    if (pattern.test(value)) {
+        return callback(new Error(i18n.global.t('container.urlWarning')));
+    }
+    callback();
+}
 
 const onSubmit = async (formEl: FormInstance | undefined) => {
     if (!formEl) return;

@@ -2,7 +2,7 @@
     <ComplexTable :data="data" @search="search" v-loading="loading">
         <template #toolbar>
             <el-button type="primary" plain @click="openCreate">
-                {{ $t('commons.button.create') + $t('website.redirect') }}
+                {{ $t('commons.button.create') }}
             </el-button>
         </template>
         <el-table-column :label="$t('commons.table.name')" prop="name" min-width="60px" show-overflow-tooltip />
@@ -22,7 +22,9 @@
         <el-table-column :label="$t('website.targetURL')" prop="target" min-width="100px" show-overflow-tooltip />
         <el-table-column :label="$t('website.keepPath')" prop="keepPath" min-width="80px" show-overflow-tooltip>
             <template #default="{ row }">
-                <span v-if="row.type != '404'">{{ row.keepPath ? $t('website.keep') : $t('website.notKeep') }}</span>
+                <span v-if="row.type != '404'">
+                    {{ row.keepPath ? $t('website.keep') : $t('website.notKeep') }}
+                </span>
                 <span v-else></span>
             </template>
         </el-table-column>
@@ -45,8 +47,10 @@
             fix
         />
     </ComplexTable>
+
     <Create ref="createRef" @close="search()" />
     <File ref="fileRef" @close="search()" />
+    <OpDialog ref="opRef" @search="search()" />
 </template>
 
 <script lang="ts" setup name="proxy">
@@ -58,7 +62,6 @@ import File from './file/index.vue';
 import { VideoPlay, VideoPause } from '@element-plus/icons-vue';
 import i18n from '@/lang';
 import { MsgSuccess } from '@/utils/message';
-import { useDeleteData } from '@/hooks/use-delete-data';
 import { ElMessageBox } from 'element-plus';
 import { GlobalStore } from '@/store';
 const globalStore = GlobalStore();
@@ -80,10 +83,11 @@ const loading = ref(false);
 const data = ref();
 const createRef = ref();
 const fileRef = ref();
+const opRef = ref();
 
 const buttons = [
     {
-        label: i18n.global.t('website.proxyFile'),
+        label: i18n.global.t('website.sourceFile'),
         click: function (row: Website.RedirectConfig) {
             openEditFile(row);
         },
@@ -140,8 +144,16 @@ const openEditFile = (proxyConfig: Website.RedirectConfig) => {
 
 const deleteProxy = async (redirectConfig: Website.RedirectConfig) => {
     redirectConfig.operate = 'delete';
-    await useDeleteData(OperateRedirectConfig, redirectConfig, 'commons.msg.delete');
-    search();
+    opRef.value.acceptParams({
+        title: i18n.global.t('commons.msg.deleteTitle'),
+        names: [redirectConfig.name],
+        msg: i18n.global.t('commons.msg.operatorHelper', [
+            i18n.global.t('website.redirect'),
+            i18n.global.t('commons.button.delete'),
+        ]),
+        api: OperateRedirectConfig,
+        params: redirectConfig,
+    });
 };
 
 const submit = async (redirectConfig: Website.RedirectConfig) => {

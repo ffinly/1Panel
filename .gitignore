@@ -16,18 +16,11 @@ build/1panel
 *.factorypath
 
 # IntelliJ IDEA
-.idea
+.idea/*
+!.idea/icon.png
 *.iws
 *.iml
 *.ipr
-
-# NetBeans
-nbproject/private/
-build/
-nbbuild/
-dist/
-nbdist/
-.nb-gradle/
 
 # Test binary, built with `go test -c`
 *.test
@@ -44,7 +37,9 @@ cmd/server/web/monacoeditorwork
 cmd/server/web/index.html
 frontend/auto-imports.d.ts
 frontend/components.d.ts
-
+frontend/src/xpack
+backend/xpack
+*_xpack.go
 .history/
 dist/
 1pctl
@@ -53,3 +48,4 @@ install.sh
 quick_start.sh
 cmd/server/fileList.txt
 .fileList.txt
+1Panel.code-workspace

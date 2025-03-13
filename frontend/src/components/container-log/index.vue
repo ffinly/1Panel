@@ -31,7 +31,7 @@
             :placeholder="$t('commons.msg.noneData')"
             :indent-with-tab="true"
             :tabSize="4"
-            style="margin-top: 10px; height: calc(100vh - 375px)"
+            :style="{ height: `calc(100vh - ${loadHeight()})`, 'margin-top': '10px' }"
             :lineWrapping="true"
             :matchBrackets="true"
             theme="cobalt"
@@ -48,11 +48,13 @@
 import { cleanContainerLog } from '@/api/modules/container';
 import i18n from '@/lang';
 import { dateFormatForName, downloadWithContent } from '@/utils/util';
-import { onBeforeUnmount, reactive, ref, shallowRef } from 'vue';
+import { nextTick, onBeforeUnmount, reactive, ref, shallowRef } from 'vue';
 import { Codemirror } from 'vue-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { MsgError, MsgSuccess } from '@/utils/message';
+import { GlobalStore } from '@/store';
+const globalStore = GlobalStore();
 
 const extensions = [javascript(), oneDark];
 
@@ -62,6 +64,10 @@ const handleReady = (payload) => {
     view.value = payload.view;
 };
 const terminalSocket = ref<WebSocket>();
+
+const loadHeight = () => {
+    return globalStore.openMenuTabs ? '405px' : '375px';
+};
 
 const logSearch = reactive({
     isWatch: false,
@@ -96,6 +102,7 @@ const searchLogs = async () => {
         MsgError(i18n.global.t('container.linesHelper'));
         return;
     }
+    terminalSocket.value?.send('close conn');
     terminalSocket.value?.close();
     logInfo.value = '';
     const href = window.location.href;
@@ -106,10 +113,12 @@ const searchLogs = async () => {
     );
     terminalSocket.value.onmessage = (event) => {
         logInfo.value += event.data;
-        const state = view.value.state;
-        view.value.dispatch({
-            selection: { anchor: state.doc.length, head: state.doc.length },
-            scrollIntoView: true,
+        nextTick(() => {
+            const state = view.value.state;
+            view.value.dispatch({
+                selection: { anchor: state.doc.length, head: state.doc.length },
+                scrollIntoView: true,
+            });
         });
     };
 };
@@ -155,7 +164,7 @@ const onClean = async () => {
 };
 
 onBeforeUnmount(() => {
-    terminalSocket.value?.close();
+    terminalSocket.value?.send('close conn');
 });
 
 defineExpose({

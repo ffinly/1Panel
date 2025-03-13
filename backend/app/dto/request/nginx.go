@@ -4,7 +4,7 @@ import "github.com/1Panel-dev/1Panel/backend/app/dto"
 
 type NginxConfigFileUpdate struct {
 	Content string `json:"content" validate:"required"`
-	Backup  bool   `json:"backup" validate:"required"`
+	Backup  bool   `json:"backup"`
 }
 
 type NginxScopeReq struct {
@@ -14,8 +14,8 @@ type NginxScopeReq struct {
 
 type NginxConfigUpdate struct {
 	Scope     dto.NginxKey `json:"scope"`
-	Operate   string       `json:"operate" validate:"required;oneof=add update delete"`
-	WebsiteID uint         `json:"websiteId" validate:"required"`
+	Operate   string       `json:"operate" validate:"required,oneof=add update delete"`
+	WebsiteID uint         `json:"websiteId"`
 	Params    interface{}  `json:"params"`
 }
 
@@ -27,7 +27,7 @@ type NginxRewriteReq struct {
 type NginxRewriteUpdate struct {
 	WebsiteID uint   `json:"websiteId" validate:"required"`
 	Name      string `json:"name" validate:"required"`
-	Content   string `json:"content" validate:"required"`
+	Content   string `json:"content"`
 }
 
 type NginxProxyUpdate struct {
@@ -39,8 +39,8 @@ type NginxProxyUpdate struct {
 type NginxAuthUpdate struct {
 	WebsiteID uint   `json:"websiteID" validate:"required"`
 	Operate   string `json:"operate" validate:"required"`
-	Username  string `json:"username"  validate:"required"`
-	Password  string `json:"password" validate:"required"`
+	Username  string `json:"username"`
+	Password  string `json:"password"`
 	Remark    string `json:"remark"`
 }
 
@@ -56,7 +56,7 @@ type NginxAntiLeechUpdate struct {
 	WebsiteID   uint     `json:"websiteID" validate:"required"`
 	Extends     string   `json:"extends" validate:"required"`
 	Return      string   `json:"return" validate:"required"`
-	Enable      bool     `json:"enable"  validate:"required"`
+	Enable      bool     `json:"enable" `
 	ServerNames []string `json:"serverNames"`
 	Cache       bool     `json:"cache"`
 	CacheTime   int      `json:"cacheTime"`
@@ -70,8 +70,8 @@ type NginxRedirectReq struct {
 	Name         string   `json:"name" validate:"required"`
 	WebsiteID    uint     `json:"websiteID" validate:"required"`
 	Domains      []string `json:"domains"`
-	KeepPath     bool     `json:"keepPath" validate:"required"`
-	Enable       bool     `json:"enable" validate:"required"`
+	KeepPath     bool     `json:"keepPath"`
+	Enable       bool     `json:"enable"`
 	Type         string   `json:"type" validate:"required"`
 	Redirect     string   `json:"redirect" validate:"required"`
 	Path         string   `json:"path"`

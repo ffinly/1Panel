@@ -23,7 +23,7 @@
                         <el-form-item :label="$t('website.cacheTime')" prop="cacheTime" v-if="form.cache">
                             <el-input v-model.number="form.cacheTime" maxlength="15">
                                 <template #append>
-                                    <el-select v-model="form.cacheUint" style="width: 100px">
+                                    <el-select v-model="form.cacheUint" class="w-s-button p-w-100">
                                         <el-option
                                             v-for="(unit, index) in Units"
                                             :key="index"
@@ -38,11 +38,7 @@
                             <el-switch v-model="form.noneRef" />
                         </el-form-item>
                         <el-form-item :label="$t('website.accessDomain')" prop="domains">
-                            <el-input
-                                v-model="form.domains"
-                                type="textarea"
-                                :autosize="{ minRows: 6, maxRows: 20 }"
-                            ></el-input>
+                            <el-input v-model="form.domains" type="textarea" :rows="6"></el-input>
                         </el-form-item>
                         <el-form-item :label="$t('website.leechReturn')" prop="return">
                             <el-input v-model="form.return" type="text" :maxlength="35"></el-input>

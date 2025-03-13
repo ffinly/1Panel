@@ -7,7 +7,7 @@
                         <el-tag effect="dark" type="success">{{ composeName }}</el-tag>
                     </div>
                     <div v-if="createdBy === '1Panel'" style="margin-left: 50px">
-                        <el-button link type="primary" @click="onComposeOperate('start')">
+                        <el-button link type="primary" @click="onComposeOperate('up')">
                             {{ $t('container.start') }}
                         </el-button>
                         <el-divider direction="vertical" />
@@ -69,9 +69,17 @@
                     @search="search"
                 >
                     <el-table-column type="selection" fix />
-                    <el-table-column :label="$t('commons.table.name')" min-width="100" prop="name" fix>
+                    <el-table-column
+                        :label="$t('commons.table.name')"
+                        min-width="100"
+                        prop="name"
+                        fix
+                        show-overflow-tooltip
+                    >
                         <template #default="{ row }">
-                            <Tooltip @click="onInspect(row.containerID)" :text="row.name" />
+                            <el-button text type="primary" @click="onInspect(row.containerID)">
+                                {{ row.name }}
+                            </el-button>
                         </template>
                     </el-table-column>
                     <el-table-column
@@ -102,11 +110,11 @@
                 </ComplexTable>
 
                 <CodemirrorDialog ref="mydetail" />
+                <OpDialog ref="opRef" @search="search" />
 
                 <ContainerLogDialog ref="dialogContainerLogRef" />
                 <MonitorDialog ref="dialogMonitorRef" />
                 <TerminalDialog ref="dialogTerminalRef" />
-                <HandleDialog @search="search" ref="handleRef" />
             </template>
         </LayoutContent>
     </div>
@@ -114,15 +122,13 @@
 
 <script lang="ts" setup>
 import { reactive, ref } from 'vue';
-import Tooltip from '@/components/tooltip/index.vue';
 import MonitorDialog from '@/views/container/container/monitor/index.vue';
 import ContainerLogDialog from '@/views/container/container/log/index.vue';
 import TerminalDialog from '@/views/container/container/terminal/index.vue';
-import HandleDialog from '@/views/container/container/handle/index.vue';
 import CodemirrorDialog from '@/components/codemirror-dialog/index.vue';
 import Status from '@/components/status/index.vue';
 import { dateFormat } from '@/utils/util';
-import { composeOperator, inspect, searchContainer } from '@/api/modules/container';
+import { composeOperator, containerOperator, inspect, searchContainer } from '@/api/modules/container';
 import { ElMessageBox } from 'element-plus';
 import i18n from '@/lang';
 import { Container } from '@/api/interface/container';
@@ -134,9 +140,9 @@ const filters = ref();
 const createdBy = ref();
 
 const dialogContainerLogRef = ref();
-const handleRef = ref();
 
-const emit = defineEmits<{ (e: 'back'): void }>();
+const opRef = ref();
+
 interface DialogProps {
     createdBy: string;
     name: string;
@@ -166,6 +172,7 @@ const search = async () => {
     let filterItem = filters.value;
     let params = {
         name: '',
+        state: 'all',
         page: paginationConfig.currentPage,
         pageSize: paginationConfig.pageSize,
         filters: filterItem,
@@ -232,28 +239,38 @@ const checkStatus = (operation: string) => {
     }
 };
 
-const onOperate = async (operation: string) => {
-    let msg = i18n.global.t('container.operatorHelper', [i18n.global.t('container.' + operation)]);
-    let containers = [];
+const onOperate = async (op: string) => {
+    let msg = i18n.global.t('container.operatorHelper', [i18n.global.t('container.' + op)]);
+    let names = [];
     for (const item of selects.value) {
-        containers.push(item.name);
+        names.push(item.name);
         if (item.isFromApp) {
-            msg = i18n.global.t('container.operatorAppHelper', [i18n.global.t('container.' + operation)]);
+            msg = i18n.global.t('container.operatorAppHelper', [i18n.global.t('container.' + op)]);
         }
     }
-    handleRef.value.acceptParams({ containers: containers, operation: operation, msg: msg });
+    opRef.value.acceptParams({
+        title: i18n.global.t('container.' + op),
+        names: names,
+        msg: msg,
+        api: containerOperator,
+        params: { names: names, operation: op },
+        successMsg: `${i18n.global.t('container.' + op)}${i18n.global.t('commons.status.success')}`,
+    });
 };
 
 const onComposeOperate = async (operation: string) => {
-    ElMessageBox.confirm(
-        i18n.global.t('container.composeOperatorHelper', [composeName.value, i18n.global.t('container.' + operation)]),
-        i18n.global.t('container.' + operation),
-        {
-            confirmButtonText: i18n.global.t('commons.button.confirm'),
-            cancelButtonText: i18n.global.t('commons.button.cancel'),
-            type: 'info',
-        },
-    ).then(async () => {
+    let mes =
+        operation === 'down'
+            ? i18n.global.t('container.composeDownHelper', [composeName.value])
+            : i18n.global.t('container.composeOperatorHelper', [
+                  composeName.value,
+                  i18n.global.t('container.' + operation),
+              ]);
+    ElMessageBox.confirm(mes, i18n.global.t('container.' + operation), {
+        confirmButtonText: i18n.global.t('commons.button.confirm'),
+        cancelButtonText: i18n.global.t('commons.button.cancel'),
+        type: 'info',
+    }).then(async () => {
         let params = {
             name: composeName.value,
             path: composePath.value,
@@ -265,11 +282,7 @@ const onComposeOperate = async (operation: string) => {
             .then(() => {
                 loading.value = false;
                 MsgSuccess(i18n.global.t('commons.msg.operationSuccess'));
-                if (operation === 'down') {
-                    emit('back');
-                } else {
-                    search();
-                }
+                search();
             })
             .catch(() => {
                 loading.value = false;

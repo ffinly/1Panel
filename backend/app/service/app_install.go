@@ -5,15 +5,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/1Panel-dev/1Panel/backend/i18n"
-
 	"github.com/1Panel-dev/1Panel/backend/utils/files"
+	httpUtil "github.com/1Panel-dev/1Panel/backend/utils/http"
+	"github.com/docker/docker/api/types"
 	"gopkg.in/yaml.v3"
 
 	"github.com/1Panel-dev/1Panel/backend/utils/env"
@@ -40,17 +43,17 @@ type AppInstallService struct {
 }
 
 type IAppInstallService interface {
-	Page(req request.AppInstalledSearch) (int64, []response.AppInstalledDTO, error)
+	Page(req request.AppInstalledSearch) (int64, []response.AppInstallDTO, error)
 	CheckExist(req request.AppInstalledInfo) (*response.AppInstalledCheck, error)
 	LoadPort(req dto.OperationWithNameAndType) (int64, error)
 	LoadConnInfo(req dto.OperationWithNameAndType) (response.DatabaseConn, error)
-	SearchForWebsite(req request.AppInstalledSearch) ([]response.AppInstalledDTO, error)
+	SearchForWebsite(req request.AppInstalledSearch) ([]response.AppInstallDTO, error)
 	Operate(req request.AppInstalledOperate) error
 	Update(req request.AppInstalledUpdate) error
 	IgnoreUpgrade(req request.AppInstalledIgnoreUpgrade) error
 	SyncAll(systemInit bool) error
 	GetServices(key string) ([]response.AppService, error)
-	GetUpdateVersions(installId uint) ([]dto.AppVersion, error)
+	GetUpdateVersions(req request.AppUpdateVersion) ([]dto.AppVersion, error)
 	GetParams(id uint) (*response.AppConfig, error)
 	ChangeAppPort(req request.PortUpdate) error
 	GetDefaultConfigByKey(key, name string) (string, error)
@@ -75,7 +78,7 @@ func (a *AppInstallService) GetInstallList() ([]dto.AppInstallInfo, error) {
 	return datas, nil
 }
 
-func (a *AppInstallService) Page(req request.AppInstalledSearch) (int64, []response.AppInstalledDTO, error) {
+func (a *AppInstallService) Page(req request.AppInstalledSearch) (int64, []response.AppInstallDTO, error) {
 	var (
 		opts     []repo.DBOption
 		total    int64
@@ -119,7 +122,7 @@ func (a *AppInstallService) Page(req request.AppInstalledSearch) (int64, []respo
 		}
 	}
 
-	installDTOs, err := handleInstalled(installs, req.Update)
+	installDTOs, err := handleInstalled(installs, req.Update, req.Sync)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -151,7 +154,7 @@ func (a *AppInstallService) CheckExist(req request.AppInstalledInfo) (*response.
 	if reflect.DeepEqual(appInstall, model.AppInstall{}) {
 		return res, nil
 	}
-	if err = syncByID(appInstall.ID); err != nil {
+	if err = syncAppInstallStatus(&appInstall, false); err != nil {
 		return nil, err
 	}
 
@@ -183,13 +186,16 @@ func (a *AppInstallService) LoadConnInfo(req dto.OperationWithNameAndType) (resp
 	if err != nil {
 		return data, nil
 	}
+	data.Status = app.Status
+	data.Username = app.UserName
 	data.Password = app.Password
 	data.ServiceName = app.ServiceName
 	data.Port = app.Port
+	data.ContainerName = app.ContainerName
 	return data, nil
 }
 
-func (a *AppInstallService) SearchForWebsite(req request.AppInstalledSearch) ([]response.AppInstalledDTO, error) {
+func (a *AppInstallService) SearchForWebsite(req request.AppInstalledSearch) ([]response.AppInstallDTO, error) {
 	var (
 		installs []model.AppInstall
 		err      error
@@ -219,7 +225,7 @@ func (a *AppInstallService) SearchForWebsite(req request.AppInstalledSearch) ([]
 		}
 	}
 
-	return handleInstalled(installs, false)
+	return handleInstalled(installs, false, true)
 }
 
 func (a *AppInstallService) Operate(req request.AppInstalledOperate) error {
@@ -239,28 +245,37 @@ func (a *AppInstallService) Operate(req request.AppInstalledOperate) error {
 		if err != nil {
 			return handleErr(install, err, out)
 		}
-		return syncByID(install.ID)
+		return syncAppInstallStatus(&install, false)
 	case constant.Stop:
 		out, err := compose.Stop(dockerComposePath)
 		if err != nil {
 			return handleErr(install, err, out)
 		}
-		return syncByID(install.ID)
+		return syncAppInstallStatus(&install, false)
 	case constant.Restart:
 		out, err := compose.Restart(dockerComposePath)
 		if err != nil {
 			return handleErr(install, err, out)
 		}
-		return syncByID(install.ID)
+		return syncAppInstallStatus(&install, false)
 	case constant.Delete:
 		if err := deleteAppInstall(install, req.DeleteBackup, req.ForceDelete, req.DeleteDB); err != nil && !req.ForceDelete {
 			return err
 		}
 		return nil
 	case constant.Sync:
-		return syncByID(install.ID)
+		return syncAppInstallStatus(&install, true)
 	case constant.Upgrade:
-		return upgradeInstall(install.ID, req.DetailId, req.Backup)
+		upgradeReq := request.AppInstallUpgrade{
+			InstallID:     install.ID,
+			DetailID:      req.DetailId,
+			Backup:        req.Backup,
+			PullImage:     req.PullImage,
+			DockerCompose: req.DockerCompose,
+		}
+		return upgradeInstall(upgradeReq)
+	case constant.Reload:
+		return opNginx(install.ContainerName, constant.NginxReload)
 	default:
 		return errors.New("operate not support")
 	}
@@ -408,7 +423,7 @@ func (a *AppInstallService) SyncAll(systemInit bool) error {
 		return err
 	}
 	for _, i := range allList {
-		if i.Status == constant.Installing || i.Status == constant.Upgrading {
+		if i.Status == constant.Installing || i.Status == constant.Upgrading || i.Status == constant.Rebuilding {
 			if systemInit {
 				i.Status = constant.Error
 				i.Message = "1Panel restart causes the task to terminate"
@@ -417,7 +432,7 @@ func (a *AppInstallService) SyncAll(systemInit bool) error {
 			continue
 		}
 		if !systemInit {
-			if err := syncByID(i.ID); err != nil {
+			if err = syncAppInstallStatus(&i, false); err != nil {
 				global.LOG.Errorf("sync install app[%s] error,mgs: %s", i.Name, err.Error())
 			}
 		}
@@ -428,6 +443,9 @@ func (a *AppInstallService) SyncAll(systemInit bool) error {
 func (a *AppInstallService) GetServices(key string) ([]response.AppService, error) {
 	var res []response.AppService
 	if DatabaseKeys[key] > 0 {
+		if key == constant.AppPostgres {
+			key = constant.AppPostgresql
+		}
 		dbs, _ := databaseRepo.GetList(commonRepo.WithByType(key))
 		if len(dbs) == 0 {
 			return res, nil
@@ -477,8 +495,8 @@ func (a *AppInstallService) GetServices(key string) ([]response.AppService, erro
 	return res, nil
 }
 
-func (a *AppInstallService) GetUpdateVersions(installId uint) ([]dto.AppVersion, error) {
-	install, err := appInstallRepo.GetFirst(commonRepo.WithByID(installId))
+func (a *AppInstallService) GetUpdateVersions(req request.AppUpdateVersion) ([]dto.AppVersion, error) {
+	install, err := appInstallRepo.GetFirst(commonRepo.WithByID(req.AppInstallID))
 	var versions []dto.AppVersion
 	if err != nil {
 		return versions, err
@@ -499,12 +517,40 @@ func (a *AppInstallService) GetUpdateVersions(installId uint) ([]dto.AppVersion,
 			continue
 		}
 		if common.CompareVersion(detail.Version, install.Version) {
+			var newCompose string
+			if req.UpdateVersion != "" && req.UpdateVersion == detail.Version && detail.DockerCompose == "" && !app.IsLocalApp() {
+				filename := filepath.Base(detail.DownloadUrl)
+				dockerComposeUrl := fmt.Sprintf("%s%s", strings.TrimSuffix(detail.DownloadUrl, filename), "docker-compose.yml")
+				statusCode, composeRes, err := httpUtil.HandleGet(dockerComposeUrl, http.MethodGet, constant.TimeOut20s)
+				if err != nil {
+					return versions, err
+				}
+				if statusCode > 200 {
+					return versions, err
+				}
+				detail.DockerCompose = string(composeRes)
+				_ = appDetailRepo.Update(context.Background(), detail)
+			}
+			newCompose, err = getUpgradeCompose(install, detail)
+			if err != nil {
+				return versions, err
+			}
+			if app.Key == constant.AppMysql {
+				majorVersion := getMajorVersion(install.Version)
+				if !strings.HasPrefix(detail.Version, majorVersion) {
+					continue
+				}
+			}
 			versions = append(versions, dto.AppVersion{
-				Version:  detail.Version,
-				DetailId: detail.ID,
+				Version:       detail.Version,
+				DetailId:      detail.ID,
+				DockerCompose: newCompose,
 			})
 		}
 	}
+	sort.Slice(versions, func(i, j int) bool {
+		return common.CompareVersion(versions[i].Version, versions[j].Version)
+	})
 	return versions, nil
 }
 
@@ -518,7 +564,7 @@ func (a *AppInstallService) ChangeAppPort(req request.PortUpdate) error {
 		return nil
 	}
 
-	if err := updateInstallInfoInDB(req.Key, "", "port", true, strconv.FormatInt(req.Port, 10)); err != nil {
+	if err := updateInstallInfoInDB(req.Key, req.Name, "port", strconv.FormatInt(req.Port, 10)); err != nil {
 		return nil
 	}
 
@@ -630,10 +676,11 @@ func (a *AppInstallService) GetParams(id uint) (*response.AppConfig, error) {
 	for _, form := range appForm.FormFields {
 		if v, ok := envs[form.EnvKey]; ok {
 			appParam := response.AppParam{
-				Edit: false,
-				Key:  form.EnvKey,
-				Rule: form.Rule,
-				Type: form.Type,
+				Edit:     false,
+				Key:      form.EnvKey,
+				Rule:     form.Rule,
+				Type:     form.Type,
+				Multiple: form.Multiple,
 			}
 			if form.Edit {
 				appParam.Edit = true
@@ -645,25 +692,52 @@ func (a *AppInstallService) GetParams(id uint) (*response.AppConfig, error) {
 				appInstall, _ := appInstallRepo.GetFirst(appInstallRepo.WithServiceName(v.(string)))
 				appParam.ShowValue = appInstall.Name
 			} else if form.Type == "select" {
-				for _, fv := range form.Values {
-					if fv.Value == v {
-						appParam.ShowValue = fv.Label
-						break
+				if form.Multiple {
+					if v == "" {
+						appParam.Value = []string{}
+					} else {
+						if str, ok := v.(string); ok {
+							appParam.Value = strings.Split(str, ",")
+						}
+					}
+				} else {
+					for _, fv := range form.Values {
+						if fv.Value == v {
+							appParam.ShowValue = fv.Label
+							break
+						}
 					}
 				}
 				appParam.Values = form.Values
+			} else if form.Type == "apps" {
+				if m, ok := form.Child.(map[string]interface{}); ok {
+					result := make(map[string]string)
+					for key, value := range m {
+						if strVal, ok := value.(string); ok {
+							result[key] = strVal
+						}
+					}
+					if envKey, ok := result["envKey"]; ok {
+						serviceName := envs[envKey]
+						if serviceName != nil {
+							appInstall, _ := appInstallRepo.GetFirst(appInstallRepo.WithServiceName(serviceName.(string)))
+							appParam.ShowValue = appInstall.Name
+						}
+					}
+				}
 			}
 			params = append(params, appParam)
 		} else {
 			params = append(params, response.AppParam{
-				Edit:    form.Edit,
-				Key:     form.EnvKey,
-				Rule:    form.Rule,
-				Type:    form.Type,
-				LabelZh: form.LabelZh,
-				LabelEn: form.LabelEn,
-				Value:   form.Default,
-				Values:  form.Values,
+				Edit:     form.Edit,
+				Key:      form.EnvKey,
+				Rule:     form.Rule,
+				Type:     form.Type,
+				LabelZh:  form.LabelZh,
+				LabelEn:  form.LabelEn,
+				Value:    form.Default,
+				Values:   form.Values,
+				Multiple: form.Multiple,
 			})
 		}
 	}
@@ -675,98 +749,39 @@ func (a *AppInstallService) GetParams(id uint) (*response.AppConfig, error) {
 		config.ContainerName = install.ContainerName
 	}
 	res.AppContainerConfig = config
+	res.HostMode = isHostModel(install.DockerCompose)
+	res.GpuConfig = isGpuConfig(install.DockerCompose)
 	return &res, nil
 }
 
-func syncByID(installID uint) error {
-	appInstall, err := appInstallRepo.GetFirst(commonRepo.WithByID(installID))
-	if err != nil {
-		return err
-	}
-	if appInstall.Status == constant.Installing {
+func syncAppInstallStatus(appInstall *model.AppInstall, force bool) error {
+	if appInstall.Status == constant.Installing || appInstall.Status == constant.Rebuilding || appInstall.Status == constant.Upgrading {
 		return nil
-	}
-	containerNames, err := getContainerNames(appInstall)
-	if err != nil {
-		return err
 	}
 	cli, err := docker.NewClient()
 	if err != nil {
 		return err
 	}
-	containers, err := cli.ListContainersByName(containerNames)
+	defer cli.Close()
+
+	var (
+		containers     []types.Container
+		containersMap  map[string]types.Container
+		containerNames = strings.Split(appInstall.ContainerName, ",")
+	)
+	containers, err = cli.ListContainersByName(containerNames)
 	if err != nil {
 		return err
 	}
-	var (
-		errorContainers    []string
-		notFoundContainers []string
-		runningContainers  []string
-		exitedContainers   []string
-	)
-
-	for _, n := range containers {
-		switch n.State {
-		case "exited":
-			exitedContainers = append(exitedContainers, n.Names[0])
-		case "running":
-			runningContainers = append(runningContainers, n.Names[0])
-		default:
-			errorContainers = append(errorContainers, n.Names[0])
-		}
+	containersMap = make(map[string]types.Container)
+	for _, con := range containers {
+		containersMap[con.Names[0]] = con
 	}
-	for _, name := range containerNames {
-		exist := false
-		for _, container := range containers {
-			if common.ExistWithStrArray(name, container.Names) {
-				exist = true
-				break
-			}
-		}
-		if !exist {
-			notFoundContainers = append(notFoundContainers, name)
-		}
-	}
-
-	containerCount := len(containers)
-	errCount := len(errorContainers)
-	notFoundCount := len(notFoundContainers)
-	existedCount := len(exitedContainers)
-	normalCount := len(containerNames)
-	runningCount := len(runningContainers)
-
-	if containerCount == 0 {
-		appInstall.Status = constant.Error
-		appInstall.Message = i18n.GetMsgWithMap("ErrContainerNotFound", map[string]interface{}{"name": strings.Join(containerNames, ",")})
-		return appInstallRepo.Save(context.Background(), &appInstall)
-	}
-	if errCount == 0 && existedCount == 0 && notFoundCount == 0 {
-		appInstall.Status = constant.Running
-		return appInstallRepo.Save(context.Background(), &appInstall)
-	}
-	if existedCount == normalCount {
-		appInstall.Status = constant.Stopped
-		return appInstallRepo.Save(context.Background(), &appInstall)
-	}
-	if errCount == normalCount {
-		appInstall.Status = constant.Error
-	}
-	if runningCount < normalCount {
-		appInstall.Status = constant.UnHealthy
-	}
-
-	var errMsg string
-	if errCount > 0 {
-		errMsg += i18n.GetMsgWithMap("ErrContainerMsg", map[string]interface{}{"name": strings.Join(errorContainers, ",")})
-	}
-	if notFoundCount > 0 {
-		errMsg += i18n.GetMsgWithMap("ErrContainerNotFound", map[string]interface{}{"name": strings.Join(notFoundContainers, ",")})
-	}
-	appInstall.Message = errMsg
-	return appInstallRepo.Save(context.Background(), &appInstall)
+	synAppInstall(containersMap, appInstall, force)
+	return nil
 }
 
-func updateInstallInfoInDB(appKey, appName, param string, isRestart bool, value interface{}) error {
+func updateInstallInfoInDB(appKey, appName, param string, value interface{}) error {
 	if param != "password" && param != "port" && param != "user-password" {
 		return nil
 	}
@@ -774,7 +789,7 @@ func updateInstallInfoInDB(appKey, appName, param string, isRestart bool, value 
 	if err != nil {
 		return nil
 	}
-	envPath := fmt.Sprintf("%s/%s/%s/.env", constant.AppInstallDir, appKey, appInstall.Name)
+	envPath := fmt.Sprintf("%s/%s/.env", appInstall.AppPath, appInstall.Name)
 	lineBytes, err := os.ReadFile(envPath)
 	if err != nil {
 		return err
@@ -783,14 +798,14 @@ func updateInstallInfoInDB(appKey, appName, param string, isRestart bool, value 
 	envKey := ""
 	switch param {
 	case "password":
-		if appKey == "mysql" || appKey == "mariadb" {
+		if appKey == "mysql" || appKey == "mariadb" || appKey == "postgresql" {
 			envKey = "PANEL_DB_ROOT_PASSWORD="
 		} else {
 			envKey = "PANEL_REDIS_ROOT_PASSWORD="
 		}
 	case "port":
 		envKey = "PANEL_APP_PORT_HTTP="
-	case "user-password":
+	default:
 		envKey = "PANEL_DB_USER_PASSWORD="
 	}
 	files := strings.Split(string(lineBytes), "\n")

@@ -13,6 +13,7 @@
                     <el-switch v-model="form.enable" @change="changeEnable"></el-switch>
                 </el-form-item>
                 <div v-if="form.enable">
+                    <el-text type="warning" class="!ml-2">{{ $t('website.ipWebsiteWarn') }}</el-text>
                     <el-divider content-position="left">{{ $t('website.SSLConfig') }}</el-divider>
                     <el-form-item :label="$t('website.HTTPConfig')" prop="httpConfig">
                         <el-select v-model="form.httpConfig" style="width: 240px">
@@ -20,6 +21,10 @@
                             <el-option :label="$t('website.HTTPAlso')" :value="'HTTPAlso'"></el-option>
                             <el-option :label="$t('website.HTTPSOnly')" :value="'HTTPSOnly'"></el-option>
                         </el-select>
+                    </el-form-item>
+                    <el-form-item :label="'HSTS'" prop="hsts">
+                        <el-checkbox v-model="form.hsts">{{ $t('commons.button.enable') }}</el-checkbox>
+                        <span class="input-help">{{ $t('website.hstsHelper') }}</span>
                     </el-form-item>
                     <el-form-item :label="$t('website.sslConfig')" prop="type">
                         <el-select v-model="form.type" @change="changeType(form.type)">
@@ -40,7 +45,12 @@
                                     :key="index"
                                     :label="acme.email"
                                     :value="acme.id"
-                                ></el-option>
+                                >
+                                    <span>
+                                        {{ acme.email }}
+                                        <el-tag class="ml-5">{{ getAccountName(acme.type) }}</el-tag>
+                                    </span>
+                                </el-option>
                             </el-select>
                         </el-form-item>
                         <el-form-item :label="$t('website.ssl')" prop="websiteSSLId" :hide-required-asterisk="true">
@@ -91,12 +101,15 @@
                         </div>
                     </div>
                     <el-form-item :label="' '" v-if="websiteSSL && websiteSSL.id > 0">
-                        <el-descriptions :column="5" border direction="vertical">
+                        <el-descriptions :column="6" border direction="vertical">
                             <el-descriptions-item :label="$t('website.primaryDomain')">
                                 {{ websiteSSL.primaryDomain }}
                             </el-descriptions-item>
                             <el-descriptions-item :label="$t('website.otherDomains')">
                                 {{ websiteSSL.domains }}
+                            </el-descriptions-item>
+                            <el-descriptions-item :label="$t('website.brand')">
+                                {{ websiteSSL.organization }}
                             </el-descriptions-item>
                             <el-descriptions-item :label="$t('ssl.provider')">
                                 {{ getProvider(websiteSSL.provider) }}
@@ -109,6 +122,9 @@
                             </el-descriptions-item>
                             <el-descriptions-item :label="$t('website.expireDate')">
                                 {{ dateFormatSimple(websiteSSL.expireDate) }}
+                            </el-descriptions-item>
+                            <el-descriptions-item :label="$t('website.remark')">
+                                {{ websiteSSL.description }}
                             </el-descriptions-item>
                         </el-descriptions>
                     </el-form-item>
@@ -129,11 +145,7 @@
                         </el-checkbox-group>
                     </el-form-item>
                     <el-form-item prop="algorithm" :label="$t('website.encryptionAlgorithm')">
-                        <el-input
-                            type="textarea"
-                            :autosize="{ minRows: 2, maxRows: 6 }"
-                            v-model.trim="form.algorithm"
-                        ></el-input>
+                        <el-input type="textarea" :rows="3" v-model.trim="form.algorithm"></el-input>
                     </el-form-item>
                     <el-form-item>
                         <el-button type="primary" @click="submit(httpsForm)">
@@ -159,7 +171,7 @@ import { ElMessageBox, FormInstance } from 'element-plus';
 import { computed, onMounted, reactive, ref } from 'vue';
 import i18n from '@/lang';
 import { Rules } from '@/global/form-rules';
-import { dateFormatSimple, getProvider } from '@/utils/util';
+import { dateFormatSimple, getProvider, getAccountName } from '@/utils/util';
 import { MsgSuccess } from '@/utils/message';
 import FileList from '@/components/file-list/index.vue';
 
@@ -185,8 +197,9 @@ const form = reactive({
     privateKeyPath: '',
     certificatePath: '',
     httpConfig: 'HTTPToHTTPS',
+    hsts: true,
     algorithm:
-        'EECDH+CHACHA20:EECDH+CHACHA20-draft:EECDH+AES128:RSA+AES128:EECDH+AES256:RSA+AES256:EECDH+3DES:RSA+3DES:!MD5',
+        'ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:!aNULL:!eNULL:!EXPORT:!DSS:!DES:!RC4:!3DES:!MD5:!PSK:!KRB5:!SRP:!CAMELLIA:!SEED',
     SSLProtocol: ['TLSv1.3', 'TLSv1.2', 'TLSv1.1', 'TLSv1'],
 });
 const loading = ref(false);
@@ -194,6 +207,7 @@ const ssls = ref();
 const acmeAccounts = ref();
 const websiteSSL = ref();
 const rules = ref({
+    hsts: [Rules.requiredInput],
     type: [Rules.requiredSelect],
     privateKey: [Rules.requiredInput],
     certificate: [Rules.requiredInput],
@@ -280,6 +294,7 @@ const get = () => {
                 websiteSSL.value = res.data.SSL;
                 form.acmeAccountID = res.data.SSL.acmeAccountId;
             }
+            form.hsts = res.data.hsts;
         }
         listSSL();
         listAcmeAccount();
@@ -307,6 +322,7 @@ const submit = async (formEl: FormInstance | undefined) => {
 const changeEnable = (enable: boolean) => {
     if (enable) {
         listSSL();
+        form.hsts = true;
     }
     if (resData.value.enable && !enable) {
         ElMessageBox.confirm(i18n.global.t('website.disableHTTPSHelper'), i18n.global.t('website.disableHTTPS'), {

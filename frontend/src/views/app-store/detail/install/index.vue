@@ -1,6 +1,7 @@
 <template>
     <el-drawer
         :close-on-click-modal="false"
+        :close-on-press-escape="false"
         v-model="open"
         :title="$t('app.install')"
         size="50%"
@@ -15,8 +16,15 @@
                     :title="$t('app.appInstallWarn')"
                     class="common-prompt"
                     :closable="false"
-                    type="error"
-                    v-if="canEditPort(installData.app.key)"
+                    type="warning"
+                    v-if="!isHostMode"
+                />
+                <el-alert
+                    :title="$t('app.hostModeHelper')"
+                    class="common-prompt"
+                    :closable="false"
+                    type="warning"
+                    v-else
                 />
                 <el-form
                     @submit.prevent
@@ -58,6 +66,10 @@
                                 :placeholder="$t('app.containerNameHelper')"
                             ></el-input>
                         </el-form-item>
+                        <el-form-item prop="allowPort" v-if="!isHostMode">
+                            <el-checkbox v-model="req.allowPort" :label="$t('app.allowPort')" size="large" />
+                            <span class="input-help">{{ $t('app.allowPortHelper') }}</span>
+                        </el-form-item>
                         <el-form-item
                             :label="$t('container.cpuQuota')"
                             prop="cpuQuota"
@@ -92,13 +104,17 @@
                                 {{ $t('container.limitHelper', [limits.memory]) }}{{ req.memoryUnit }}B
                             </span>
                         </el-form-item>
-                        <el-form-item prop="allowPort" v-if="canEditPort(installData.app.key)">
-                            <el-checkbox v-model="req.allowPort" :label="$t('app.allowPort')" size="large" />
-                            <span class="input-help">{{ $t('app.allowPortHelper') }}</span>
-                        </el-form-item>
                         <el-form-item prop="editCompose">
                             <el-checkbox v-model="req.editCompose" :label="$t('app.editCompose')" size="large" />
                             <span class="input-help">{{ $t('app.editComposeHelper') }}</span>
+                        </el-form-item>
+                        <el-form-item pro="gpuConfig" v-if="gpuSupport">
+                            <el-checkbox v-model="req.gpuConfig" :label="$t('app.gpuConfig')" size="large" />
+                            <span class="input-help">{{ $t('app.gpuConfigHelper') }}</span>
+                        </el-form-item>
+                        <el-form-item pro="pullImage">
+                            <el-checkbox v-model="req.pullImage" :label="$t('app.pullImage')" size="large" />
+                            <span class="input-help">{{ $t('app.pullImageHelper') }}</span>
                         </el-form-item>
                         <div v-if="req.editCompose">
                             <codemirror
@@ -135,29 +151,28 @@
 import { App } from '@/api/interface/app';
 import { GetApp, GetAppDetail, InstallApp } from '@/api/modules/app';
 import { Rules, checkNumberRange } from '@/global/form-rules';
-import { canEditPort } from '@/global/business';
 import { FormInstance, FormRules } from 'element-plus';
 import { onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import Params from '../params/index.vue';
 import Header from '@/components/drawer-header/index.vue';
 import { Codemirror } from 'vue-codemirror';
-import { javascript } from '@codemirror/lang-javascript';
+import { yaml } from '@codemirror/lang-yaml';
 import { oneDark } from '@codemirror/theme-one-dark';
 import i18n from '@/lang';
 import { MsgError } from '@/utils/message';
 import { Container } from '@/api/interface/container';
 import { loadResourceLimit } from '@/api/modules/container';
 
-const extensions = [javascript(), oneDark];
+const extensions = [yaml(), oneDark];
 const router = useRouter();
 
-interface InstallRrops {
+interface InstallProps {
     params?: App.AppParams;
     app: any;
 }
 
-const installData = ref<InstallRrops>({
+const installData = ref<InstallProps>({
     app: {},
 });
 const open = ref(false);
@@ -186,6 +201,8 @@ const initData = () => ({
     dockerCompose: '',
     version: '',
     appID: '',
+    pullImage: true,
+    gpuConfig: false,
 });
 const req = reactive(initData());
 const limits = ref<Container.ResourceLimit>({
@@ -202,6 +219,8 @@ const handleClose = () => {
     }
 };
 const paramKey = ref(1);
+const isHostMode = ref(false);
+const gpuSupport = ref(false);
 
 const changeUnit = () => {
     if (req.memoryUnit == 'M') {
@@ -216,10 +235,11 @@ const resetForm = () => {
         paramForm.value.clearValidate();
         paramForm.value.resetFields();
     }
+    isHostMode.value = false;
     Object.assign(req, initData());
 };
 
-const acceptParams = async (props: InstallRrops) => {
+const acceptParams = async (props: InstallProps) => {
     resetForm();
     if (props.app.versions != undefined) {
         installData.value = props;
@@ -245,8 +265,10 @@ const getAppDetail = async (version: string) => {
         const res = await GetAppDetail(installData.value.app.id, version, 'app');
         req.appDetailId = res.data.id;
         req.dockerCompose = res.data.dockerCompose;
+        isHostMode.value = res.data.hostMode;
         installData.value.params = res.data.params;
         paramKey.value++;
+        gpuSupport.value = res.data.gpuSupport;
     } catch (error) {
     } finally {
         loading.value = false;
@@ -269,7 +291,7 @@ const submit = async (formEl: FormInstance | undefined) => {
         if (req.memoryLimit < 0) {
             req.memoryLimit = 0;
         }
-        if (canEditPort(installData.value.app.key) && !req.allowPort) {
+        if (!isHostMode.value && !req.allowPort) {
             ElMessageBox.confirm(i18n.global.t('app.installWarn'), i18n.global.t('app.checkTitle'), {
                 confirmButtonText: i18n.global.t('commons.button.confirm'),
                 cancelButtonText: i18n.global.t('commons.button.cancel'),

@@ -1,5 +1,11 @@
 <template>
-    <el-drawer :close-on-click-modal="false" v-model="open" size="50%">
+    <el-drawer
+        :destroy-on-close="true"
+        :close-on-click-modal="false"
+        :close-on-press-escape="false"
+        v-model="open"
+        size="50%"
+    >
         <template #header>
             <DrawerHeader
                 :header="$t('runtime.' + mode)"
@@ -28,6 +34,7 @@
                                     v-model="runtime.appID"
                                     :disabled="mode === 'edit'"
                                     @change="changeApp(runtime.appID)"
+                                    class="p-w-200"
                                 >
                                     <el-option
                                         v-for="(app, index) in apps"
@@ -42,6 +49,7 @@
                                     v-model="runtime.version"
                                     :disabled="mode === 'edit'"
                                     @change="changeVersion()"
+                                    class="p-w-200"
                                 >
                                     <el-option
                                         v-for="(version, index) in appVersions"
@@ -65,42 +73,97 @@
                             </template>
                         </el-input>
                     </el-form-item>
-                    <el-form-item :label="$t('runtime.runScript')" prop="params.EXEC_SCRIPT">
-                        <el-select v-model="runtime.params['EXEC_SCRIPT']">
-                            <el-option
-                                v-for="(script, index) in scripts"
-                                :key="index"
-                                :label="script.name + ' 【 ' + script.script + ' 】'"
-                                :value="script.name"
-                            >
-                                <el-row :gutter="10">
-                                    <el-col :span="4">{{ script.name }}</el-col>
-                                    <el-col :span="10">{{ ' 【 ' + script.script + ' 】' }}</el-col>
-                                </el-row>
-                            </el-option>
-                        </el-select>
-                        <span class="input-help">{{ $t('runtime.runScriptHelper') }}</span>
-                    </el-form-item>
                     <el-row :gutter="20">
-                        <el-col :span="9">
+                        <el-col :span="18">
+                            <el-form-item :label="$t('runtime.runScript')" prop="params.EXEC_SCRIPT">
+                                <el-select
+                                    v-model="runtime.params['EXEC_SCRIPT']"
+                                    v-if="runtime.params['CUSTOM_SCRIPT'] == '0'"
+                                >
+                                    <el-option
+                                        v-for="(script, index) in scripts"
+                                        :key="index"
+                                        :label="script.name + ' 【 ' + script.script + ' 】'"
+                                        :value="script.name"
+                                    >
+                                        <el-row :gutter="10">
+                                            <el-col :span="4">{{ script.name }}</el-col>
+                                            <el-col :span="10">{{ ' 【 ' + script.script + ' 】' }}</el-col>
+                                        </el-row>
+                                    </el-option>
+                                </el-select>
+                                <el-input v-else v-model="runtime.params['EXEC_SCRIPT']"></el-input>
+                                <span class="input-help" v-if="runtime.params['CUSTOM_SCRIPT'] == '0'">
+                                    {{ $t('runtime.runScriptHelper') }}
+                                </span>
+                                <span class="input-help" v-else>
+                                    {{ $t('runtime.customScriptHelper') }}
+                                </span>
+                            </el-form-item>
+                        </el-col>
+                        <el-col :span="6">
+                            <el-form-item :label="$t('runtime.customScript')" prop="params.CUSTOM_SCRIPT">
+                                <el-switch
+                                    v-model="runtime.params['CUSTOM_SCRIPT']"
+                                    :active-value="'1'"
+                                    :inactive-value="'0'"
+                                    @change="changeScriptType"
+                                />
+                            </el-form-item>
+                        </el-col>
+                    </el-row>
+                    <el-row :gutter="20">
+                        <el-col :span="7">
                             <el-form-item :label="$t('runtime.appPort')" prop="params.NODE_APP_PORT">
                                 <el-input v-model.number="runtime.params['NODE_APP_PORT']" />
                                 <span class="input-help">{{ $t('runtime.appPortHelper') }}</span>
                             </el-form-item>
                         </el-col>
-                        <el-col :span="9">
+                        <el-col :span="7">
                             <el-form-item :label="$t('runtime.externalPort')" prop="port">
                                 <el-input v-model.number="runtime.port" />
                                 <span class="input-help">{{ $t('runtime.externalPortHelper') }}</span>
                             </el-form-item>
                         </el-col>
-
+                        <el-col :span="4">
+                            <el-form-item :label="$t('commons.button.add')">
+                                <el-button @click="addPort">
+                                    <el-icon><Plus /></el-icon>
+                                </el-button>
+                            </el-form-item>
+                        </el-col>
                         <el-col :span="6">
                             <el-form-item :label="$t('app.allowPort')" prop="params.HOST_IP">
-                                <el-select v-model="runtime.params['HOST_IP']">
-                                    <el-option :label="$t('runtime.open')" value="0.0.0.0"></el-option>
-                                    <el-option :label="$t('runtime.close')" value="127.0.0.1"></el-option>
-                                </el-select>
+                                <el-switch
+                                    v-model="runtime.params['HOST_IP']"
+                                    :active-value="'0.0.0.0'"
+                                    :inactive-value="'127.0.0.1'"
+                                />
+                            </el-form-item>
+                        </el-col>
+                    </el-row>
+                    <el-row :gutter="20" v-for="(port, index) of runtime.exposedPorts" :key="index">
+                        <el-col :span="7">
+                            <el-form-item
+                                :prop="'exposedPorts.' + index + '.containerPort'"
+                                :rules="rules.params.NODE_APP_PORT"
+                            >
+                                <el-input v-model.number="port.containerPort" :placeholder="$t('runtime.appPort')" />
+                            </el-form-item>
+                        </el-col>
+                        <el-col :span="7">
+                            <el-form-item
+                                :prop="'exposedPorts.' + index + '.hostPort'"
+                                :rules="rules.params.NODE_APP_PORT"
+                            >
+                                <el-input v-model.number="port.hostPort" :placeholder="$t('runtime.externalPort')" />
+                            </el-form-item>
+                        </el-col>
+                        <el-col :span="4">
+                            <el-form-item>
+                                <el-button type="primary" @click="removePort(index)" link>
+                                    {{ $t('commons.button.delete') }}
+                                </el-button>
                             </el-form-item>
                         </el-col>
                     </el-row>
@@ -108,6 +171,7 @@
                         <el-select v-model="runtime.params['PACKAGE_MANAGER']">
                             <el-option label="npm" value="npm"></el-option>
                             <el-option label="yarn" value="yarn"></el-option>
+                            <el-option v-if="hasPnpm" label="pnpm" value="pnpm"></el-option>
                         </el-select>
                     </el-form-item>
                     <el-form-item :label="$t('runtime.imageSource')" prop="source">
@@ -147,12 +211,12 @@ import { GetApp, GetAppDetail, SearchApp } from '@/api/modules/app';
 import { CreateRuntime, GetNodeScripts, GetRuntime, UpdateRuntime } from '@/api/modules/runtime';
 import { Rules, checkNumberRange } from '@/global/form-rules';
 import i18n from '@/lang';
-import { MsgSuccess } from '@/utils/message';
+import { MsgError, MsgSuccess } from '@/utils/message';
 import { FormInstance } from 'element-plus';
-import { reactive, ref, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import DrawerHeader from '@/components/drawer-header/index.vue';
 
-interface OperateRrops {
+interface OperateProps {
     id?: number;
     mode: string;
     type: string;
@@ -178,6 +242,7 @@ const initData = (type: string) => ({
     params: {
         PACKAGE_MANAGER: 'npm',
         HOST_IP: '0.0.0.0',
+        CUSTOM_SCRIPT: '0',
     },
     type: type,
     resource: 'appstore',
@@ -185,6 +250,7 @@ const initData = (type: string) => ({
     codeDir: '/',
     port: 3000,
     source: 'https://registry.npmjs.org/',
+    exposedPorts: [],
 });
 let runtime = reactive<Runtime.RuntimeCreate>(initData('node'));
 const rules = ref<any>({
@@ -203,6 +269,13 @@ const rules = ref<any>({
 });
 const scripts = ref<Runtime.NodeScripts[]>([]);
 const em = defineEmits(['close']);
+
+const hasPnpm = computed(() => {
+    if (runtime.version == undefined) {
+        return false;
+    }
+    return parseFloat(runtime.version) > 18;
+});
 
 const imageSources = [
     {
@@ -232,7 +305,7 @@ watch(
 watch(
     () => runtime.name,
     (newVal) => {
-        if (newVal) {
+        if (newVal && mode.value == 'create') {
             runtime.params['CONTAINER_NAME'] = newVal;
         }
     },
@@ -248,6 +321,24 @@ const handleClose = () => {
 const getPath = (codeDir: string) => {
     runtime.codeDir = codeDir;
     getScripts();
+};
+
+const changeScriptType = () => {
+    runtime.params['EXEC_SCRIPT'] = '';
+    if (runtime.params['CUSTOM_SCRIPT'] == '0') {
+        getScripts();
+    }
+};
+
+const addPort = () => {
+    runtime.exposedPorts.push({
+        hostPort: undefined,
+        containerPort: undefined,
+    });
+};
+
+const removePort = (index: number) => {
+    runtime.exposedPorts.splice(index, 1);
 };
 
 const getScripts = () => {
@@ -288,6 +379,9 @@ const changeApp = (appID: number) => {
 
 const changeVersion = () => {
     loading.value = true;
+    if (runtime.params['PACKAGE_MANAGER'] == 'pnpm' && !hasPnpm.value) {
+        runtime.params['PACKAGE_MANAGER'] = 'npm';
+    }
     GetAppDetail(runtime.appID, runtime.version, 'runtime')
         .then((res) => {
             runtime.appDetailID = res.data.id;
@@ -315,6 +409,25 @@ const submit = async (formEl: FormInstance | undefined) => {
         if (!valid) {
             return;
         }
+        if (runtime.exposedPorts && runtime.exposedPorts.length > 0) {
+            const containerPortMap = new Map();
+            const hostPortMap = new Map();
+            containerPortMap[runtime.params['NODE_APP_PORT']] = true;
+            hostPortMap[runtime.port] = true;
+            for (const port of runtime.exposedPorts) {
+                if (containerPortMap[port.containerPort]) {
+                    MsgError(i18n.global.t('runtime.portError'));
+                    return;
+                }
+                if (hostPortMap[port.hostPort]) {
+                    MsgError(i18n.global.t('runtime.portError'));
+                    return;
+                }
+                hostPortMap[port.hostPort] = true;
+                containerPortMap[port.containerPort] = true;
+            }
+        }
+
         if (mode.value == 'create') {
             loading.value = true;
             CreateRuntime(runtime)
@@ -358,24 +471,27 @@ const getRuntime = async (id: number) => {
             codeDir: data.codeDir,
             port: data.port,
         });
+        runtime.exposedPorts = data.exposedPorts || [];
         editParams.value = data.appParams;
-        if (mode.value == 'edit') {
-            searchApp(data.appID);
+        searchApp(data.appID);
+        if (data.params['CUSTOM_SCRIPT'] == undefined || data.params['CUSTOM_SCRIPT'] == '0') {
+            data.params['CUSTOM_SCRIPT'] = '0';
+            getScripts();
         }
-        getScripts();
+        open.value = true;
     } catch (error) {}
 };
 
-const acceptParams = async (props: OperateRrops) => {
+const acceptParams = async (props: OperateProps) => {
     mode.value = props.mode;
     scripts.value = [];
     if (props.mode === 'create') {
         Object.assign(runtime, initData(props.type));
         searchApp(null);
+        open.value = true;
     } else {
         getRuntime(props.id);
     }
-    open.value = true;
 };
 
 defineExpose({

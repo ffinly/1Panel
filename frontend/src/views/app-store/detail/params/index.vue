@@ -25,7 +25,7 @@
                 @change="updateParam"
             ></el-input>
             <el-select
-                style="width: 100%"
+                class="p-w-200"
                 v-model="form[p.envKey]"
                 v-if="p.type == 'service'"
                 @change="changeService(form[p.envKey], p.services)"
@@ -37,12 +37,12 @@
                     :label="service.label"
                 ></el-option>
             </el-select>
-            <span v-if="p.type === 'service' && p.services.length === 0">
+            <span v-if="p.type === 'service' && p.services.length === 0" class="ml-1.5">
                 <el-link type="primary" :underline="false" @click="toPage(p.key)">
                     {{ $t('app.toInstall') }}
                 </el-link>
             </span>
-            <el-select v-model="form[p.envKey]" v-if="p.type == 'select'">
+            <el-select v-model="form[p.envKey]" v-if="p.type == 'select'" :multiple="p.multiple" class="p-w-200">
                 <el-option
                     v-for="service in p.values"
                     :key="service.label"
@@ -56,7 +56,7 @@
                         <el-select
                             v-model="form[p.envKey]"
                             @change="getServices(p.child.envKey, form[p.envKey], p)"
-                            style="width: 100%"
+                            class="p-w-200"
                         >
                             <el-option
                                 v-for="service in p.values"
@@ -73,6 +73,7 @@
                             v-model="form[p.child.envKey]"
                             v-if="p.child.type == 'service'"
                             @change="changeService(form[p.child.envKey], p.services)"
+                            class="p-w-200"
                         >
                             <el-option
                                 v-for="service in p.services"
@@ -106,10 +107,7 @@ import { getRandomStr } from '@/utils/util';
 import { GetAppService } from '@/api/modules/app';
 import { Rules } from '@/global/form-rules';
 import { App } from '@/api/interface/app';
-import { useRouter } from 'vue-router';
-import { useI18n } from 'vue-i18n';
 import { getDBName } from '@/utils/util';
-const router = useRouter();
 
 interface ParamObj extends App.FromField {
     services: App.AppService[];
@@ -197,6 +195,8 @@ const handleParams = () => {
                 if (p.rule && p.rule != '') {
                     rules[p.envKey].push(Rules[p.rule]);
                 }
+            } else {
+                delete rules[p.envKey];
             }
             if (p.type === 'apps') {
                 getServices(p.child.envKey, p.default, p);
@@ -247,7 +247,11 @@ const changeService = (value: string, services: App.AppService[]) => {
 };
 
 const getLabel = (row: ParamObj): string => {
-    const language = useI18n().locale.value;
+    const language = localStorage.getItem('lang') || 'zh';
+    let lang = language == 'tw' ? 'zh-Hant' : language;
+    if (row.label && row.label[lang] != '') {
+        return row.label[lang];
+    }
     if (language == 'zh' || language == 'tw') {
         return row.labelZh;
     } else {
@@ -256,7 +260,7 @@ const getLabel = (row: ParamObj): string => {
 };
 
 const toPage = (key: string) => {
-    router.push({ name: 'AppAll', query: { install: key } });
+    window.location.href = '/apps/all?install=' + key;
 };
 
 onMounted(() => {

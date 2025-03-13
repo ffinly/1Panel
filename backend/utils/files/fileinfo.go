@@ -3,13 +3,16 @@ package files
 import (
 	"bufio"
 	"fmt"
+	"github.com/1Panel-dev/1Panel/backend/app/repo"
 	"github.com/1Panel-dev/1Panel/backend/buserr"
 	"github.com/1Panel-dev/1Panel/backend/constant"
 	"io/fs"
+	"net/http"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -41,6 +44,8 @@ type FileInfo struct {
 	FileMode   os.FileMode `json:"-"`
 	Items      []*FileInfo `json:"items"`
 	ItemTotal  int         `json:"itemTotal"`
+	FavoriteID uint        `json:"favoriteID"`
+	IsDetail   bool        `json:"isDetail"`
 }
 
 type FileOption struct {
@@ -52,6 +57,9 @@ type FileOption struct {
 	ShowHidden bool   `json:"showHidden"`
 	Page       int    `json:"page"`
 	PageSize   int    `json:"pageSize"`
+	SortBy     string `json:"sortBy"`
+	SortOrder  string `json:"sortOrder"`
+	IsDetail   bool   `json:"isDetail"`
 }
 
 type FileSearchInfo struct {
@@ -64,6 +72,9 @@ func NewFileInfo(op FileOption) (*FileInfo, error) {
 
 	info, err := appFs.Stat(op.Path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, buserr.New(constant.ErrLinkPathNotFound)
+		}
 		return nil, err
 	}
 
@@ -84,23 +95,54 @@ func NewFileInfo(op FileOption) (*FileInfo, error) {
 		Gid:       strconv.FormatUint(uint64(info.Sys().(*syscall.Stat_t).Gid), 10),
 		Group:     GetGroup(info.Sys().(*syscall.Stat_t).Gid),
 		MimeType:  GetMimeType(op.Path),
+		IsDetail:  op.IsDetail,
 	}
+	favoriteRepo := repo.NewIFavoriteRepo()
+	favorite, _ := favoriteRepo.GetFirst(favoriteRepo.WithByPath(op.Path))
+	if favorite.ID > 0 {
+		file.FavoriteID = favorite.ID
+	}
+
 	if file.IsSymlink {
-		file.LinkPath = GetSymlink(op.Path)
-	}
-	if op.Expand {
-		if file.IsDir {
-			if err := file.listChildren(op.Dir, op.ShowHidden, op.ContainSub, op.Search, op.Page, op.PageSize); err != nil {
-				return nil, err
-			}
-			return file, nil
-		} else {
-			if err := file.getContent(); err != nil {
+		linkPath := GetSymlink(op.Path)
+		if !filepath.IsAbs(linkPath) {
+			dir := filepath.Dir(op.Path)
+			var err error
+			linkPath, err = filepath.Abs(filepath.Join(dir, linkPath))
+			if err != nil {
 				return nil, err
 			}
 		}
+		file.LinkPath = linkPath
+		targetInfo, err := appFs.Stat(linkPath)
+		if err != nil {
+			file.IsDir = false
+			file.Mode = "-"
+			file.User = "-"
+			file.Group = "-"
+		} else {
+			file.IsDir = targetInfo.IsDir()
+		}
+		file.Extension = filepath.Ext(file.LinkPath)
+	}
+	if op.Expand {
+		if err := handleExpansion(file, op); err != nil {
+			return nil, err
+		}
 	}
 	return file, nil
+}
+
+func handleExpansion(file *FileInfo, op FileOption) error {
+	if file.IsDir {
+		return file.listChildren(op)
+	}
+
+	if !file.IsDetail {
+		return file.getContent()
+	}
+
+	return nil
 }
 
 func (f *FileInfo) search(search string, count int) (files []FileSearchInfo, total int, err error) {
@@ -139,7 +181,42 @@ func (f *FileInfo) search(search string, count int) (files []FileSearchInfo, tot
 	return
 }
 
-func (f *FileInfo) listChildren(dir, showHidden, containSub bool, search string, page, pageSize int) error {
+func sortFileList(list []FileSearchInfo, sortBy, sortOrder string) {
+	switch sortBy {
+	case "name":
+		if sortOrder == "ascending" {
+			sort.Slice(list, func(i, j int) bool {
+				return list[i].Name() < list[j].Name()
+			})
+		} else {
+			sort.Slice(list, func(i, j int) bool {
+				return list[i].Name() > list[j].Name()
+			})
+		}
+	case "size":
+		if sortOrder == "ascending" {
+			sort.Slice(list, func(i, j int) bool {
+				return list[i].Size() < list[j].Size()
+			})
+		} else {
+			sort.Slice(list, func(i, j int) bool {
+				return list[i].Size() > list[j].Size()
+			})
+		}
+	case "modTime":
+		if sortOrder == "ascending" {
+			sort.Slice(list, func(i, j int) bool {
+				return list[i].ModTime().Before(list[j].ModTime())
+			})
+		} else {
+			sort.Slice(list, func(i, j int) bool {
+				return list[i].ModTime().After(list[j].ModTime())
+			})
+		}
+	}
+}
+
+func (f *FileInfo) listChildren(option FileOption) error {
 	afs := &afero.Afero{Fs: f.Fs}
 	var (
 		files []FileSearchInfo
@@ -147,57 +224,88 @@ func (f *FileInfo) listChildren(dir, showHidden, containSub bool, search string,
 		total int
 	)
 
-	if search != "" && containSub {
-		files, total, err = f.search(search, page*pageSize)
+	if option.Search != "" && option.ContainSub {
+		files, total, err = f.search(option.Search, option.Page*option.PageSize)
 		if err != nil {
 			return err
 		}
 	} else {
-		dirFiles, err := afs.ReadDir(f.Path)
+		files, err = f.getFiles(afs, option)
 		if err != nil {
 			return err
 		}
-		for _, file := range dirFiles {
-			files = append(files, FileSearchInfo{
-				Path:     f.Path,
-				FileInfo: file,
-			})
+	}
+
+	items, err := f.processFiles(files, option)
+	if err != nil {
+		return err
+	}
+
+	if option.ContainSub {
+		f.ItemTotal = total
+	}
+	start := (option.Page - 1) * option.PageSize
+	end := option.PageSize + start
+	var result []*FileInfo
+	if start < 0 || start > f.ItemTotal || end < 0 || start > end {
+		result = items
+	} else {
+		if end > f.ItemTotal {
+			result = items[start:]
+		} else {
+			result = items[start:end]
 		}
 	}
 
+	f.Items = result
+	return nil
+}
+
+func (f *FileInfo) getFiles(afs *afero.Afero, option FileOption) ([]FileSearchInfo, error) {
+	dirFiles, err := afs.ReadDir(f.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	var (
+		dirs     []FileSearchInfo
+		fileList []FileSearchInfo
+	)
+
+	for _, file := range dirFiles {
+		info := FileSearchInfo{
+			Path:     f.Path,
+			FileInfo: file,
+		}
+		if file.IsDir() {
+			dirs = append(dirs, info)
+		} else {
+			fileList = append(fileList, info)
+		}
+	}
+
+	sortFileList(dirs, option.SortBy, option.SortOrder)
+	sortFileList(fileList, option.SortBy, option.SortOrder)
+
+	return append(dirs, fileList...), nil
+}
+
+func (f *FileInfo) processFiles(files []FileSearchInfo, option FileOption) ([]*FileInfo, error) {
 	var items []*FileInfo
+
 	for _, df := range files {
-		if dir && !df.IsDir() {
+		if shouldSkipFile(df, option) {
 			continue
 		}
-		name := df.Name()
-		fPath := path.Join(df.Path, df.Name())
-		if search != "" {
-			if containSub {
-				fPath = df.Path
-				name = strings.TrimPrefix(strings.TrimPrefix(fPath, f.Path), "/")
-			} else {
-				lowerName := strings.ToLower(name)
-				lowerSearch := strings.ToLower(search)
-				if !strings.Contains(lowerName, lowerSearch) {
-					continue
-				}
-			}
-		}
-		if !showHidden && IsHidden(name) {
+
+		name, fPath := f.getFilePathAndName(option, df)
+
+		if !option.ShowHidden && IsHidden(name) {
 			continue
 		}
 		f.ItemTotal++
-		isSymlink, isInvalidLink := false, false
-		if IsSymlink(df.Mode()) {
-			isSymlink = true
-			info, err := f.Fs.Stat(fPath)
-			if err == nil {
-				df.FileInfo = info
-			} else {
-				isInvalidLink = true
-			}
-		}
+
+		isSymlink, isInvalidLink := f.checkSymlink(df)
 
 		file := &FileInfo{
 			Fs:        f.Fs,
@@ -216,9 +324,32 @@ func (f *FileInfo) listChildren(dir, showHidden, containSub bool, search string,
 			Uid:       strconv.FormatUint(uint64(df.Sys().(*syscall.Stat_t).Uid), 10),
 			Gid:       strconv.FormatUint(uint64(df.Sys().(*syscall.Stat_t).Gid), 10),
 		}
-
+		favoriteRepo := repo.NewIFavoriteRepo()
+		favorite, _ := favoriteRepo.GetFirst(favoriteRepo.WithByPath(fPath))
+		if favorite.ID > 0 {
+			file.FavoriteID = favorite.ID
+		}
 		if isSymlink {
-			file.LinkPath = GetSymlink(fPath)
+			linkPath := GetSymlink(fPath)
+			if !filepath.IsAbs(linkPath) {
+				dir := filepath.Dir(fPath)
+				var err error
+				linkPath, err = filepath.Abs(filepath.Join(dir, linkPath))
+				if err != nil {
+					return nil, err
+				}
+			}
+			file.LinkPath = linkPath
+			targetInfo, err := file.Fs.Stat(linkPath)
+			if err != nil {
+				file.IsDir = false
+				file.Mode = "-"
+				file.User = "-"
+				file.Group = "-"
+			} else {
+				file.IsDir = targetInfo.IsDir()
+			}
+			file.Extension = filepath.Ext(file.LinkPath)
 		}
 		if df.Size() > 0 {
 			file.MimeType = GetMimeType(fPath)
@@ -228,55 +359,90 @@ func (f *FileInfo) listChildren(dir, showHidden, containSub bool, search string,
 		}
 		items = append(items, file)
 	}
-	if containSub {
-		f.ItemTotal = total
-	}
-	start := (page - 1) * pageSize
-	end := pageSize + start
-	var result []*FileInfo
-	if start < 0 || start > f.ItemTotal || end < 0 || start > end {
-		result = items
-	} else {
-		if end > f.ItemTotal {
-			result = items[start:]
-		} else {
-			result = items[start:end]
-		}
-	}
 
-	f.Items = result
-	return nil
+	return items, nil
 }
 
-func (f *FileInfo) getContent() error {
-	if f.Size <= 10*1024*1024 {
-		afs := &afero.Afero{Fs: f.Fs}
-		cByte, err := afs.ReadFile(f.Path)
-		if err != nil {
-			return nil
-		}
-		if len(cByte) > 0 && detectBinary(cByte) {
-			return buserr.New(constant.ErrFileCanNotRead)
-		}
-		f.Content = string(cByte)
-		return nil
-	} else {
-		return buserr.New(constant.ErrFileCanNotRead)
+func shouldSkipFile(df FileSearchInfo, option FileOption) bool {
+	if option.Dir && !df.IsDir() {
+		return true
 	}
-}
 
-func detectBinary(buf []byte) bool {
-	whiteByte := 0
-	n := min(1024, len(buf))
-	for i := 0; i < n; i++ {
-		if (buf[i] >= 0x20) || buf[i] == 9 || buf[i] == 10 || buf[i] == 13 {
-			whiteByte++
-		} else if buf[i] <= 6 || (buf[i] >= 14 && buf[i] <= 31) {
+	if option.Search != "" && !option.ContainSub {
+		lowerName := strings.ToLower(df.Name())
+		lowerSearch := strings.ToLower(option.Search)
+		if !strings.Contains(lowerName, lowerSearch) {
 			return true
 		}
 	}
 
-	return whiteByte < 1
+	return false
+}
+
+func (f *FileInfo) getFilePathAndName(option FileOption, df FileSearchInfo) (string, string) {
+	name := df.Name()
+	fPath := path.Join(df.Path, df.Name())
+
+	if option.Search != "" && option.ContainSub {
+		fPath = df.Path
+		name = strings.TrimPrefix(strings.TrimPrefix(fPath, f.Path), "/")
+	}
+
+	return name, fPath
+}
+
+func (f *FileInfo) checkSymlink(df FileSearchInfo) (bool, bool) {
+	isSymlink := false
+	isInvalidLink := false
+
+	if IsSymlink(df.Mode()) {
+		isSymlink = true
+		info, err := f.Fs.Stat(path.Join(df.Path, df.Name()))
+		if err == nil {
+			df.FileInfo = info
+		} else {
+			isInvalidLink = true
+		}
+	}
+
+	return isSymlink, isInvalidLink
+}
+
+func (f *FileInfo) getContent() error {
+	if IsBlockDevice(f.FileMode) {
+		return buserr.New(constant.ErrFileCanNotRead)
+	}
+	if f.Size > 10*1024*1024 {
+		return buserr.New("ErrFileToLarge")
+	}
+	afs := &afero.Afero{Fs: f.Fs}
+	cByte, err := afs.ReadFile(f.Path)
+	if err != nil {
+		return nil
+	}
+	if len(cByte) > 0 && DetectBinary(cByte) {
+		return buserr.New(constant.ErrFileCanNotRead)
+	}
+	f.Content = string(cByte)
+	return nil
+}
+
+func DetectBinary(buf []byte) bool {
+	mimeType := http.DetectContentType(buf)
+	if !strings.HasPrefix(mimeType, "text/") {
+		whiteByte := 0
+		n := min(1024, len(buf))
+		for i := 0; i < n; i++ {
+			if (buf[i] >= 0x20) || buf[i] == 9 || buf[i] == 10 || buf[i] == 13 {
+				whiteByte++
+			} else if buf[i] <= 6 || (buf[i] >= 14 && buf[i] <= 31) {
+				return true
+			}
+		}
+		return whiteByte < 1
+	}
+	return false
+
 }
 
 func min(x, y int) int {
@@ -285,3 +451,16 @@ func min(x, y int) int {
 	}
 	return y
 }
+
+type CompressType string
+
+const (
+	Zip      CompressType = "zip"
+	Gz       CompressType = "gz"
+	Bz2      CompressType = "bz2"
+	Tar      CompressType = "tar"
+	TarGz    CompressType = "tar.gz"
+	Xz       CompressType = "xz"
+	SdkZip   CompressType = "sdkZip"
+	SdkTarGz CompressType = "sdkTarGz"
+)

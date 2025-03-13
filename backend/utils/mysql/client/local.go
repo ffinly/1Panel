@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"errors"
@@ -18,14 +19,15 @@ import (
 )
 
 type Local struct {
+	Type          string
 	PrefixCommand []string
 	Database      string
 	Password      string
 	ContainerName string
 }
 
-func NewLocal(command []string, containerName, password, database string) *Local {
-	return &Local{PrefixCommand: command, ContainerName: containerName, Password: password, Database: database}
+func NewLocal(command []string, dbType, containerName, password, database string) *Local {
+	return &Local{Type: dbType, PrefixCommand: command, ContainerName: containerName, Password: password, Database: database}
 }
 
 func (r *Local) Create(info CreateInfo) error {
@@ -63,13 +65,15 @@ func (r *Local) CreateUser(info CreateInfo, withDeleteDB bool) error {
 			if strings.Contains(strings.ToLower(err.Error()), "error 1396") {
 				return buserr.New(constant.ErrUserIsExist)
 			}
-			_ = r.Delete(DeleteInfo{
-				Name:        info.Name,
-				Version:     info.Version,
-				Username:    info.Username,
-				Permission:  info.Permission,
-				ForceDelete: true,
-				Timeout:     300})
+			if withDeleteDB {
+				_ = r.Delete(DeleteInfo{
+					Name:        info.Name,
+					Version:     info.Version,
+					Username:    info.Username,
+					Permission:  info.Permission,
+					ForceDelete: true,
+					Timeout:     300})
+			}
 			return err
 		}
 		grantStr := fmt.Sprintf("grant all privileges on `%s`.* to %s", info.Name, user)
@@ -82,13 +86,15 @@ func (r *Local) CreateUser(info CreateInfo, withDeleteDB bool) error {
 			grantStr = grantStr + " with grant option;"
 		}
 		if err := r.ExecSQL(grantStr, info.Timeout); err != nil {
-			_ = r.Delete(DeleteInfo{
-				Name:        info.Name,
-				Version:     info.Version,
-				Username:    info.Username,
-				Permission:  info.Permission,
-				ForceDelete: true,
-				Timeout:     300})
+			if withDeleteDB {
+				_ = r.Delete(DeleteInfo{
+					Name:        info.Name,
+					Version:     info.Version,
+					Username:    info.Username,
+					Permission:  info.Permission,
+					ForceDelete: true,
+					Timeout:     300})
+			}
 			return err
 		}
 	}
@@ -218,14 +224,28 @@ func (r *Local) Backup(info BackupInfo) error {
 			return fmt.Errorf("mkdir %s failed, err: %v", info.TargetDir, err)
 		}
 	}
-	outfile, _ := os.OpenFile(path.Join(info.TargetDir, info.FileName), os.O_RDWR|os.O_CREATE, 0755)
-	global.LOG.Infof("start to mysqldump | gzip > %s.gzip", info.TargetDir+"/"+info.FileName)
-	cmd := exec.Command("docker", "exec", r.ContainerName, "mysqldump", "-uroot", "-p"+r.Password, info.Name)
+	outfile, err := os.OpenFile(path.Join(info.TargetDir, info.FileName), os.O_RDWR|os.O_CREATE, 0755)
+	if err != nil {
+		return fmt.Errorf("open file %s failed, err: %v", path.Join(info.TargetDir, info.FileName), err)
+	}
+	defer outfile.Close()
+	dumpCmd := "mysqldump"
+	if r.Type == constant.AppMariaDB {
+		dumpCmd = "mariadb-dump"
+	}
+	global.LOG.Infof("start to %s | gzip > %s.gzip", dumpCmd, info.TargetDir+"/"+info.FileName)
+	cmd := exec.Command("docker", "exec", r.ContainerName, dumpCmd, "--routines", "-uroot", "-p"+r.Password, "--default-character-set="+info.Format, info.Name)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
 	gzipCmd := exec.Command("gzip", "-cf")
 	gzipCmd.Stdin, _ = cmd.StdoutPipe()
 	gzipCmd.Stdout = outfile
 	_ = gzipCmd.Start()
-	_ = cmd.Run()
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("handle backup database failed, err: %v", stderr.String())
+	}
 	_ = gzipCmd.Wait()
 	return nil
 }
@@ -233,7 +253,7 @@ func (r *Local) Backup(info BackupInfo) error {
 func (r *Local) Recover(info RecoverInfo) error {
 	fi, _ := os.Open(info.SourceFile)
 	defer fi.Close()
-	cmd := exec.Command("docker", "exec", "-i", r.ContainerName, "mysql", "-uroot", "-p"+r.Password, info.Name)
+	cmd := exec.Command("docker", "exec", "-i", r.ContainerName, r.Type, "-uroot", "-p"+r.Password, "--default-character-set="+info.Format, info.Name)
 	if strings.HasSuffix(info.SourceFile, ".gz") {
 		gzipFile, err := os.Open(info.SourceFile)
 		if err != nil {
@@ -269,7 +289,7 @@ func (r *Local) SyncDB(version string) ([]SyncDBInfo, error) {
 		if len(parts) != 2 {
 			continue
 		}
-		if parts[0] == "SCHEMA_NAME" || parts[0] == "information_schema" || parts[0] == "mysql" || parts[0] == "performance_schema" || parts[0] == "sys" {
+		if parts[0] == "SCHEMA_NAME" || parts[0] == "information_schema" || parts[0] == "mysql" || parts[0] == "performance_schema" || parts[0] == "sys" || parts[0] == "__recycle_bin__" || parts[0] == "recycle_bin" {
 			continue
 		}
 		dataItem := SyncDBInfo{
@@ -280,7 +300,10 @@ func (r *Local) SyncDB(version string) ([]SyncDBInfo, error) {
 		}
 		userLines, err := r.ExecSQLForRows(fmt.Sprintf("select user,host from mysql.db where db = '%s'", parts[0]), 300)
 		if err != nil {
-			return datas, err
+			global.LOG.Debugf("sync user of db %s failed, err: %v", parts[0], err)
+			dataItem.Permission = "%"
+			datas = append(datas, dataItem)
+			continue
 		}
 
 		var permissionItem []string
@@ -307,19 +330,6 @@ func (r *Local) SyncDB(version string) ([]SyncDBInfo, error) {
 			}
 		}
 		if len(dataItem.Username) == 0 {
-			dataItem.Username = loadNameByDB(parts[0], version)
-			dataItem.Password = randomPassword(dataItem.Username)
-			if err := r.CreateUser(CreateInfo{
-				Name:       parts[0],
-				Format:     parts[1],
-				Version:    version,
-				Username:   dataItem.Username,
-				Password:   dataItem.Password,
-				Permission: "%",
-				Timeout:    300,
-			}, false); err != nil {
-				global.LOG.Errorf("sync from remote server failed, err: create user failed %v", err)
-			}
 			dataItem.Permission = "%"
 		} else {
 			if isLocal {
@@ -343,7 +353,7 @@ func (r *Local) ExecSQL(command string, timeout uint) error {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "docker", itemCommand...)
 	stdout, err := cmd.CombinedOutput()
-	if ctx.Err() == context.DeadlineExceeded {
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return buserr.New(constant.ErrExecTimeOut)
 	}
 	stdStr := strings.ReplaceAll(string(stdout), "mysql: [Warning] Using a password on the command line interface can be insecure.\n", "")
@@ -360,7 +370,7 @@ func (r *Local) ExecSQLForRows(command string, timeout uint) ([]string, error) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "docker", itemCommand...)
 	stdout, err := cmd.CombinedOutput()
-	if ctx.Err() == context.DeadlineExceeded {
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return nil, buserr.New(constant.ErrExecTimeOut)
 	}
 	stdStr := strings.ReplaceAll(string(stdout), "mysql: [Warning] Using a password on the command line interface can be insecure.\n", "")

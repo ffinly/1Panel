@@ -3,15 +3,17 @@ package websocket
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/1Panel-dev/1Panel/backend/global"
-	"github.com/1Panel-dev/1Panel/backend/utils/files"
-	"github.com/shirou/gopsutil/v3/host"
-	"github.com/shirou/gopsutil/v3/net"
-	"github.com/shirou/gopsutil/v3/process"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/1Panel-dev/1Panel/backend/global"
+	"github.com/1Panel-dev/1Panel/backend/utils/common"
+	"github.com/1Panel-dev/1Panel/backend/utils/files"
+	"github.com/shirou/gopsutil/v3/host"
+	"github.com/shirou/gopsutil/v3/net"
+	"github.com/shirou/gopsutil/v3/process"
 )
 
 type WsInput struct {
@@ -86,18 +88,6 @@ type processConnect struct {
 
 type ProcessConnects []processConnect
 
-func (p ProcessConnects) Len() int {
-	return len(p)
-}
-
-func (p ProcessConnects) Less(i, j int) bool {
-	return p[i].PID < p[j].PID
-}
-
-func (p ProcessConnects) Swap(i, j int) {
-	p[i], p[j] = p[j], p[i]
-}
-
 type sshSession struct {
 	Username  string `json:"username"`
 	PID       int32  `json:"PID"`
@@ -156,26 +146,6 @@ func getDownloadProcess(progress DownloadProgress) (res []byte, err error) {
 	}
 	res, err = json.Marshal(result)
 	return
-}
-
-const (
-	b  = uint64(1)
-	kb = 1024 * b
-	mb = 1024 * kb
-	gb = 1024 * mb
-)
-
-func formatBytes(bytes uint64) string {
-	switch {
-	case bytes < kb:
-		return fmt.Sprintf("%dB", bytes)
-	case bytes < mb:
-		return fmt.Sprintf("%.2fKB", float64(bytes)/float64(kb))
-	case bytes < gb:
-		return fmt.Sprintf("%.2fMB", float64(bytes)/float64(mb))
-	default:
-		return fmt.Sprintf("%.2fGB", float64(bytes)/float64(gb))
-	}
 }
 
 func getProcessData(processConfig PsProcessConfig) (res []byte, err error) {
@@ -241,14 +211,14 @@ func getProcessData(processConfig PsProcessConfig) (res []byte, err error) {
 		procData.CpuPercent = fmt.Sprintf("%.2f", procData.CpuValue) + "%"
 		menInfo, procErr := proc.MemoryInfo()
 		if procErr == nil {
-			procData.Rss = formatBytes(menInfo.RSS)
+			procData.Rss = common.FormatBytes(menInfo.RSS)
 			procData.RssValue = menInfo.RSS
-			procData.Data = formatBytes(menInfo.Data)
-			procData.VMS = formatBytes(menInfo.VMS)
-			procData.HWM = formatBytes(menInfo.HWM)
-			procData.Stack = formatBytes(menInfo.Stack)
-			procData.Locked = formatBytes(menInfo.Locked)
-			procData.Swap = formatBytes(menInfo.Swap)
+			procData.Data = common.FormatBytes(menInfo.Data)
+			procData.VMS = common.FormatBytes(menInfo.VMS)
+			procData.HWM = common.FormatBytes(menInfo.HWM)
+			procData.Stack = common.FormatBytes(menInfo.Stack)
+			procData.Locked = common.FormatBytes(menInfo.Locked)
+			procData.Swap = common.FormatBytes(menInfo.Swap)
 		} else {
 			procData.Rss = "--"
 			procData.Data = "--"
@@ -262,8 +232,8 @@ func getProcessData(processConfig PsProcessConfig) (res []byte, err error) {
 		}
 		ioStat, procErr := proc.IOCounters()
 		if procErr == nil {
-			procData.DiskWrite = formatBytes(ioStat.WriteBytes)
-			procData.DiskRead = formatBytes(ioStat.ReadBytes)
+			procData.DiskWrite = common.FormatBytes(ioStat.WriteBytes)
+			procData.DiskRead = common.FormatBytes(ioStat.ReadBytes)
 		} else {
 			procData.DiskWrite = "--"
 			procData.DiskRead = "--"

@@ -1,6 +1,12 @@
 <template>
     <div>
-        <el-drawer v-model="drawerVisible" :destroy-on-close="true" :close-on-click-modal="false" size="30%">
+        <el-drawer
+            v-model="drawerVisible"
+            :destroy-on-close="true"
+            :close-on-click-modal="false"
+            :close-on-press-escape="false"
+            size="30%"
+        >
             <template #header>
                 <DrawerHeader :header="$t('setting.defaultNetwork')" :back="handleClose" />
             </template>
@@ -43,7 +49,7 @@ import { updateSetting } from '@/api/modules/setting';
 import { FormInstance } from 'element-plus';
 import { Rules } from '@/global/form-rules';
 import DrawerHeader from '@/components/drawer-header/index.vue';
-import { getNetworkOptions } from '@/api/modules/monitor';
+import { getNetworkOptions } from '@/api/modules/host';
 import { GlobalStore } from '@/store';
 const globalStore = GlobalStore();
 

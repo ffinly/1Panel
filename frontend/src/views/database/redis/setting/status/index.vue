@@ -2,7 +2,7 @@
     <div v-if="statusShow" class="database-status">
         <el-form label-position="top">
             <span class="title">{{ $t('database.baseParam') }}</span>
-            <el-divider class="devider" />
+            <el-divider class="divider" />
             <el-row class="content">
                 <el-col :xs="8" :sm="6" :md="6" :lg="6" :xl="6">
                     <el-form-item>
@@ -34,7 +34,7 @@
             </el-row>
 
             <span class="title">{{ $t('database.performanceParam') }}</span>
-            <el-divider class="devider" />
+            <el-divider class="divider" />
             <el-row class="content">
                 <el-col :xs="12" :sm="12" :md="6" :lg="6" :xl="6">
                     <el-form-item>
@@ -52,6 +52,15 @@
                         </template>
                         <span class="status-count">{{ redisStatus.used_memory }}</span>
                         <span class="input-help">{{ $t('database.usedMemory') }}</span>
+                    </el-form-item>
+                </el-col>
+                <el-col :xs="12" :sm="12" :md="6" :lg="6" :xl="6">
+                    <el-form-item>
+                        <template #label>
+                            <span class="status-label">used_memory_peak</span>
+                        </template>
+                        <span class="status-count">{{ redisStatus.used_memory_peak }}</span>
+                        <span class="input-help">{{ $t('database.usedMemoryPeak') }}</span>
                     </el-form-item>
                 </el-col>
                 <el-col :xs="12" :sm="12" :md="6" :lg="6" :xl="6">
@@ -152,20 +161,23 @@ const redisStatus = reactive({
     latest_fork_usec: '',
 });
 
+const database = ref();
 const statusShow = ref(false);
 
 interface DialogProps {
+    database: string;
     status: string;
 }
 const acceptParams = (prop: DialogProps): void => {
     statusShow.value = true;
+    database.value = prop.database;
     if (prop.status === 'Running') {
         loadStatus();
     }
 };
 
 const loadStatus = async () => {
-    const res = await loadRedisStatus();
+    const res = await loadRedisStatus(database.value);
     let hit = (
         (Number(res.data.keyspace_hits) / (Number(res.data.keyspace_hits) + Number(res.data.keyspace_misses))) *
         100
@@ -175,6 +187,7 @@ const loadStatus = async () => {
     redisStatus.tcp_port = res.data.tcp_port;
     redisStatus.connected_clients = res.data.connected_clients;
     redisStatus.used_memory_rss = (Number(res.data.used_memory_rss) / 1024 / 1024).toFixed(2) + ' MB';
+    redisStatus.used_memory_peak = (Number(res.data.used_memory_peak) / 1024 / 1024).toFixed(2) + ' MB';
     redisStatus.used_memory = (Number(res.data.used_memory) / 1024 / 1024).toFixed(2) + ' MB';
     redisStatus.mem_fragmentation_ratio = res.data.mem_fragmentation_ratio;
     redisStatus.total_connections_received = res.data.total_connections_received;
@@ -193,7 +206,7 @@ defineExpose({
 
 <style lang="scss" scoped>
 .database-status {
-    .devider {
+    .divider {
         display: block;
         height: 1px;
         width: 100%;

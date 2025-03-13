@@ -7,6 +7,8 @@ export namespace Setting {
         email: string;
         systemIP: string;
         systemVersion: string;
+        dockerSockPath: string;
+        developerMode: string;
 
         sessionTimeout: number;
         localTime: string;
@@ -15,6 +17,7 @@ export namespace Setting {
 
         panelName: string;
         theme: string;
+        menuTabs: string;
         language: string;
         defaultNetwork: string;
         lastCleanTime: string;
@@ -22,6 +25,8 @@ export namespace Setting {
         lastCleanData: string;
 
         serverPort: number;
+        ipv6: string;
+        bindAddress: string;
         ssl: string;
         sslType: string;
         allowIPs: string;
@@ -42,10 +47,34 @@ export namespace Setting {
         emailVars: string;
         weChatVars: string;
         dingVars: string;
+        snapshotIgnore: string;
+        xpackHideMenu: string;
+        noAuthSetting: string;
+
+        proxyUrl: string;
+        proxyType: string;
+        proxyPort: string;
+        proxyUser: string;
+        proxyPasswd: string;
+        proxyPasswdKeep: string;
+
+        apiInterfaceStatus: string;
+        apiKey: string;
+        ipWhiteList: string;
+        apiKeyValidityTime: number;
+        licenseVerify: string;
     }
     export interface SettingUpdate {
         key: string;
         value: string;
+    }
+    export interface ProxyUpdate {
+        proxyUrl: string;
+        proxyType: string;
+        proxyPort: string;
+        proxyUser: string;
+        proxyPasswd: string;
+        proxyPasswdKeep: string;
     }
     export interface SSLUpdate {
         ssl: string;
@@ -84,27 +113,13 @@ export namespace Setting {
         interval: string;
     }
 
-    export interface CleanData {
-        systemClean: Array<CleanTree>;
-        uploadClean: Array<CleanTree>;
-        downloadClean: Array<CleanTree>;
-        systemLogClean: Array<CleanTree>;
-    }
-    export interface CleanTree {
-        id: string;
-        label: string;
-        children: Array<CleanTree>;
-        type: string;
-        name: string;
-        size: number;
-        isCheck: boolean;
-        isRecommend: boolean;
-    }
-
     export interface SnapshotCreate {
         id: number;
         from: string;
+        fromAccounts: Array<string>;
+        defaultDownload: string;
         description: string;
+        secret: string;
     }
     export interface SnapshotImport {
         from: string;
@@ -115,15 +130,17 @@ export namespace Setting {
         id: number;
         isNew: boolean;
         reDownload: boolean;
+        secret: string;
     }
     export interface SnapshotInfo {
         id: number;
         name: string;
         from: string;
+        defaultDownload: string;
         description: string;
         status: string;
         message: string;
-        createdAt: DateTimeFormats;
+        created_at: DateTimeFormats;
         version: string;
         interruptStep: string;
         recoverStatus: string;
@@ -132,6 +149,12 @@ export namespace Setting {
         rollbackStatus: string;
         rollbackMessage: string;
         lastRollbackedAt: string;
+        secret: string;
+    }
+    export interface SnapshotFile {
+        id: number;
+        name: string;
+        size: number;
     }
     export interface SnapshotStatus {
         panel: string;
@@ -146,8 +169,33 @@ export namespace Setting {
         upload: string;
     }
     export interface UpgradeInfo {
+        testVersion: string;
         newVersion: string;
         latestVersion: string;
         releaseNote: string;
+    }
+
+    export interface License {
+        licenseName: string;
+        assigneeName: string;
+        productPro: string;
+        versionConstraint: string;
+        trial: boolean;
+        offline: boolean;
+        status: string;
+        message: string;
+        smsUsed: number;
+        smsTotal: number;
+    }
+    export interface LicenseStatus {
+        productPro: string;
+        trial: boolean;
+        status: string;
+    }
+    export interface ApiConfig {
+        apiInterfaceStatus: string;
+        apiKey: string;
+        ipWhiteList: string;
+        apiKeyValidityTime: number;
     }
 }

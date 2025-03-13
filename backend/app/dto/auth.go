@@ -12,29 +12,29 @@ type UserLoginInfo struct {
 }
 
 type MfaRequest struct {
-	Title    string `json:"title"`
-	Interval int    `json:"interval"`
+	Title    string `json:"title" validate:"required"`
+	Interval int    `json:"interval" validate:"required"`
 }
 
 type MfaCredential struct {
-	Secret   string `json:"secret"`
-	Code     string `json:"code"`
-	Interval string `json:"interval"`
+	Secret   string `json:"secret" validate:"required"`
+	Code     string `json:"code" validate:"required"`
+	Interval string `json:"interval" validate:"required"`
 }
 
 type Login struct {
-	Name          string `json:"name"`
-	Password      string `json:"password"`
+	Name          string `json:"name" validate:"required"`
+	Password      string `json:"password" validate:"required"`
 	IgnoreCaptcha bool   `json:"ignoreCaptcha"`
 	Captcha       string `json:"captcha"`
 	CaptchaID     string `json:"captchaID"`
-	AuthMethod    string `json:"authMethod"`
-	Language      string `json:"language"`
+	AuthMethod    string `json:"authMethod" validate:"required,oneof=jwt session"`
+	Language      string `json:"language" validate:"required,oneof=zh en tw ja ko ru ms 'pt-BR'"`
 }
 
 type MFALogin struct {
-	Name       string `json:"name"`
-	Password   string `json:"password"`
-	Code       string `json:"code"`
+	Name       string `json:"name" validate:"required"`
+	Password   string `json:"password" validate:"required"`
+	Code       string `json:"code" validate:"required"`
 	AuthMethod string `json:"authMethod"`
 }

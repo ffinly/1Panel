@@ -5,6 +5,7 @@
             :destroy-on-close="true"
             @close="handleClose"
             :close-on-click-modal="false"
+            :close-on-press-escape="false"
             size="30%"
         >
             <template #header>
@@ -79,8 +80,13 @@ const onSave = async (formEl: FormInstance | undefined) => {
             },
         )
             .then(async () => {
+                let params = {
+                    key: 'PermitRootLogin',
+                    oldValue: '',
+                    newValue: form.permitRootLogin,
+                };
                 loading.value = true;
-                await updateSSH('PermitRootLogin', form.permitRootLogin)
+                await updateSSH(params)
                     .then(() => {
                         loading.value = false;
                         handleClose();

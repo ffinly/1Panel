@@ -6,11 +6,17 @@ export namespace Backup {
         type: string;
         accessKey: string;
         bucket: string;
+        bucketInput: boolean;
         credential: string;
         backupPath: string;
         vars: string;
         varsJson: object;
         createdAt: Date;
+    }
+    export interface OneDriveInfo {
+        client_id: string;
+        client_secret: string;
+        redirect_uri: string;
     }
     export interface BackupOperate {
         id: number;
@@ -34,6 +40,11 @@ export namespace Backup {
         fileDir: string;
         fileName: string;
     }
+    export interface BackupFile {
+        id: number;
+        name: string;
+        size: number;
+    }
     export interface ForBucket {
         type: string;
         accessKey: string;
@@ -45,10 +56,14 @@ export namespace Backup {
         name: string;
         detailName: string;
     }
+    export interface SearchBackupRecordByCronjob extends ReqPage {
+        cronjobID: number;
+    }
     export interface Backup {
         type: string;
         name: string;
         detailName: string;
+        secret: string;
     }
     export interface Recover {
         source: string;
@@ -56,5 +71,6 @@ export namespace Backup {
         name: string;
         detailName: string;
         file: string;
+        secret: string;
     }
 }

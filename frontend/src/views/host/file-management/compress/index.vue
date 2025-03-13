@@ -3,6 +3,7 @@
         v-model="open"
         :destroy-on-close="true"
         :close-on-click-modal="false"
+        :close-on-press-escape="false"
         :before-close="handleClose"
         size="50%"
     >
@@ -36,6 +37,9 @@
                             </template>
                         </el-input>
                     </el-form-item>
+                    <el-form-item :label="$t('setting.compressPassword')" prop="secret" v-if="form.type === 'tar.gz'">
+                        <el-input v-model="form.secret"></el-input>
+                    </el-form-item>
                     <el-form-item>
                         <el-checkbox v-model="form.replace" :label="$t('file.replace')"></el-checkbox>
                     </el-form-item>
@@ -57,7 +61,7 @@ import { computed, reactive, ref } from 'vue';
 import { File } from '@/api/interface/file';
 import { FormInstance, FormRules } from 'element-plus';
 import { Rules } from '@/global/form-rules';
-import { CompressExtention, CompressType } from '@/enums/files';
+import { CompressExtension, CompressType } from '@/enums/files';
 import { CompressFile } from '@/api/modules/files';
 import FileList from '@/components/file-list/index.vue';
 import DrawerHeader from '@/components/drawer-header/index.vue';
@@ -78,7 +82,7 @@ const rules = reactive<FormRules>({
 
 const fileForm = ref<FormInstance>();
 const loading = ref(false);
-const form = ref<File.FileCompress>({ files: [], type: 'zip', dst: '', name: '', replace: false });
+const form = ref<File.FileCompress>({ files: [], type: 'zip', dst: '', name: '', replace: false, secret: '' });
 const options = ref<string[]>([]);
 const open = ref(false);
 const title = ref('');
@@ -87,7 +91,7 @@ const operate = ref('compress');
 const em = defineEmits(['close']);
 
 const extension = computed(() => {
-    return CompressExtention[form.value.type];
+    return CompressExtension[form.value.type];
 });
 
 const handleClose = () => {

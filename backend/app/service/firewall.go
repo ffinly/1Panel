@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -28,6 +29,7 @@ type IFirewallService interface {
 	SearchWithPage(search dto.RuleSearch) (int64, interface{}, error)
 	OperateFirewall(operation string) error
 	OperatePortRule(req dto.PortRuleOperate, reload bool) error
+	OperateForwardRule(req dto.ForwardRuleOperate) error
 	OperateAddressRule(req dto.AddrRuleOperate, reload bool) error
 	UpdatePortRule(req dto.PortRuleUpdate) error
 	UpdateAddrRule(req dto.AddrRuleUpdate) error
@@ -78,42 +80,39 @@ func (u *FirewallService) SearchWithPage(req dto.RuleSearch) (int64, interface{}
 	if err != nil {
 		return 0, nil, err
 	}
-	if req.Type == "port" {
-		ports, err := client.ListPort()
-		if err != nil {
-			return 0, nil, err
-		}
-		if len(req.Info) != 0 {
-			for _, port := range ports {
-				if strings.Contains(port.Port, req.Info) {
-					datas = append(datas, port)
-				}
-			}
-		} else {
-			datas = ports
-		}
-	} else {
-		addrs, err := client.ListAddress()
-		if err != nil {
-			return 0, nil, err
-		}
-		if len(req.Info) != 0 {
-			for _, addr := range addrs {
-				if strings.Contains(addr.Address, req.Info) {
-					datas = append(datas, addr)
-				}
-			}
-		} else {
-			datas = addrs
-		}
+
+	var rules []fireClient.FireInfo
+	switch req.Type {
+	case "port":
+		rules, err = client.ListPort()
+	case "forward":
+		rules, err = client.ListForward()
+	case "address":
+		rules, err = client.ListAddress()
+	}
+	if err != nil {
+		return 0, nil, err
 	}
 
+	if len(req.Info) != 0 {
+		for _, addr := range rules {
+			if strings.Contains(addr.Address, req.Info) ||
+				strings.Contains(addr.Port, req.Info) ||
+				strings.Contains(addr.TargetPort, req.Info) ||
+				strings.Contains(addr.TargetIP, req.Info) {
+				datas = append(datas, addr)
+			}
+		}
+	} else {
+		datas = rules
+	}
 	if req.Type == "port" {
 		apps := u.loadPortByApp()
 		for i := 0; i < len(datas); i++ {
 			datas[i].UsedStatus = checkPortUsed(datas[i].Port, datas[i].Protocol, apps)
 		}
 	}
+
 	var datasFilterStatus []fireClient.FireInfo
 	if len(req.Status) != 0 {
 		for _, data := range datas {
@@ -127,6 +126,7 @@ func (u *FirewallService) SearchWithPage(req dto.RuleSearch) (int64, interface{}
 	} else {
 		datasFilterStatus = datas
 	}
+
 	var datasFilterStrategy []fireClient.FireInfo
 	if len(req.Strategy) != 0 {
 		for _, data := range datasFilterStatus {
@@ -179,6 +179,7 @@ func (u *FirewallService) OperateFirewall(operation string) error {
 	if err != nil {
 		return err
 	}
+	needRestartDocker := false
 	switch operation {
 	case "start":
 		if err := client.Start(); err != nil {
@@ -188,20 +189,30 @@ func (u *FirewallService) OperateFirewall(operation string) error {
 			_ = client.Stop()
 			return err
 		}
-		_, _ = cmd.Exec("systemctl restart docker")
-		return nil
+		needRestartDocker = true
 	case "stop":
 		if err := client.Stop(); err != nil {
 			return err
 		}
-		_, _ = cmd.Exec("systemctl restart docker")
-		return nil
+		needRestartDocker = true
+	case "restart":
+		if err := client.Restart(); err != nil {
+			return err
+		}
+		needRestartDocker = true
 	case "disablePing":
 		return u.updatePingStatus("0")
 	case "enablePing":
 		return u.updatePingStatus("1")
+	default:
+		return fmt.Errorf("not supported operation: %s", operation)
 	}
-	return fmt.Errorf("not support such operation: %s", operation)
+	if needRestartDocker {
+		if err := restartDocker(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (u *FirewallService) OperatePortRule(req dto.PortRuleOperate, reload bool) error {
@@ -223,11 +234,11 @@ func (u *FirewallService) OperatePortRule(req dto.PortRuleOperate, reload bool) 
 					req.Port = strings.ReplaceAll(req.Port, "-", ":")
 					req.Protocol = proto
 					if err := u.operatePort(client, req); err != nil {
-						global.LOG.Errorf("%s port %s/%s failed (strategy: %s, address: %s), err: %v", req.Operation, req.Port, req.Protocol, req.Strategy, req.Address, err)
+						return err
 					}
 					req.Port = strings.ReplaceAll(req.Port, ":", "-")
 					if err := u.addPortRecord(req); err != nil {
-						global.LOG.Errorf("add record %s/%s failed (strategy: %s, address: %s), err: %v", req.Port, req.Protocol, req.Strategy, req.Address, err)
+						return err
 					}
 				}
 			}
@@ -242,13 +253,13 @@ func (u *FirewallService) OperatePortRule(req dto.PortRuleOperate, reload bool) 
 			}
 			req.Address = addr
 			if err := u.operatePort(client, req); err != nil {
-				global.LOG.Errorf("%s port %s/%s failed (strategy: %s, address: %s), err: %v", req.Operation, req.Port, req.Protocol, req.Strategy, req.Address, err)
+				return err
 			}
 			if len(req.Protocol) == 0 {
 				req.Protocol = "tcp/udp"
 			}
 			if err := u.addPortRecord(req); err != nil {
-				global.LOG.Errorf("add record %s/%s failed (strategy: %s, address: %s), err: %v", req.Port, req.Protocol, req.Strategy, req.Address, err)
+				return err
 			}
 		}
 		return nil
@@ -261,9 +272,11 @@ func (u *FirewallService) OperatePortRule(req dto.PortRuleOperate, reload bool) 
 				req.Protocol = proto
 				req.Address = addr
 				if err := u.operatePort(client, req); err != nil {
-					global.LOG.Errorf("%s port %s/%s failed (strategy: %s, address: %s), err: %v", req.Operation, req.Port, req.Protocol, req.Strategy, req.Address, err)
+					return err
 				}
-				_ = u.addPortRecord(req)
+				if err := u.addPortRecord(req); err != nil {
+					return err
+				}
 			}
 		} else {
 			ports := strings.Split(itemPorts, ",")
@@ -276,9 +289,11 @@ func (u *FirewallService) OperatePortRule(req dto.PortRuleOperate, reload bool) 
 					req.Port = port
 					req.Protocol = proto
 					if err := u.operatePort(client, req); err != nil {
-						global.LOG.Errorf("%s port %s/%s failed (strategy: %s, address: %s), err: %v", req.Operation, req.Port, req.Protocol, req.Strategy, req.Address, err)
+						return err
 					}
-					_ = u.addPortRecord(req)
+					if err := u.addPortRecord(req); err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -286,6 +301,93 @@ func (u *FirewallService) OperatePortRule(req dto.PortRuleOperate, reload bool) 
 
 	if reload {
 		return client.Reload()
+	}
+	return nil
+}
+
+func (u *FirewallService) OperateForwardRule(req dto.ForwardRuleOperate) error {
+	client, err := firewall.NewFirewallClient()
+	if err != nil {
+		return err
+	}
+
+	rules, _ := client.ListForward()
+	i := 0
+	for _, rule := range rules {
+		shouldKeep := true
+		for i := range req.Rules {
+			reqRule := &req.Rules[i]
+			if reqRule.TargetIP == "" {
+				reqRule.TargetIP = "127.0.0.1"
+			}
+
+			if reqRule.Operation == "remove" {
+				for _, proto := range strings.Split(reqRule.Protocol, "/") {
+					if reqRule.Port == rule.Port &&
+						reqRule.TargetPort == rule.TargetPort &&
+						reqRule.TargetIP == rule.TargetIP &&
+						proto == rule.Protocol {
+						shouldKeep = false
+						break
+					}
+				}
+			}
+		}
+		if shouldKeep {
+			rules[i] = rule
+			i++
+		}
+	}
+	rules = rules[:i]
+
+	for _, rule := range rules {
+		for _, reqRule := range req.Rules {
+			if reqRule.Operation == "remove" {
+				continue
+			}
+
+			for _, proto := range strings.Split(reqRule.Protocol, "/") {
+				if reqRule.Port == rule.Port &&
+					reqRule.TargetPort == rule.TargetPort &&
+					reqRule.TargetIP == rule.TargetIP &&
+					proto == rule.Protocol {
+					return constant.ErrRecordExist
+				}
+			}
+		}
+	}
+
+	sort.SliceStable(req.Rules, func(i, j int) bool {
+		if req.Rules[i].Operation == "remove" && req.Rules[j].Operation != "remove" {
+			return true
+		}
+		if req.Rules[i].Operation != "remove" && req.Rules[j].Operation == "remove" {
+			return false
+		}
+		n1, _ := strconv.Atoi(req.Rules[i].Num)
+		n2, _ := strconv.Atoi(req.Rules[j].Num)
+		return n1 > n2
+	})
+
+	for _, r := range req.Rules {
+		for _, p := range strings.Split(r.Protocol, "/") {
+			if r.TargetIP == "" {
+				r.TargetIP = "127.0.0.1"
+			}
+			if err = client.PortForward(fireClient.Forward{
+				Num:        r.Num,
+				Protocol:   p,
+				Port:       r.Port,
+				TargetIP:   r.TargetIP,
+				TargetPort: r.TargetPort,
+			}, r.Operation); err != nil {
+				if req.ForceDelete {
+					global.LOG.Error(err)
+					continue
+				}
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -308,10 +410,12 @@ func (u *FirewallService) OperateAddressRule(req dto.AddrRuleOperate, reload boo
 		}
 		fireInfo.Address = addressList[i]
 		if err := client.RichRules(fireInfo, req.Operation); err != nil {
-			global.LOG.Errorf("%s address %s failed (strategy: %s), err: %v", req.Operation, addressList[i], req.Strategy, err)
+			return err
 		}
 		req.Address = addressList[i]
-		_ = u.addAddressRecord(req)
+		if err := u.addAddressRecord(req); err != nil {
+			return err
+		}
 	}
 	if reload {
 		return client.Reload()
@@ -530,12 +634,6 @@ func (u *FirewallService) addPortsBeforeStart(client firewall.FirewallClient) er
 	if err := client.Port(fireClient.FireInfo{Port: "443", Protocol: "tcp", Strategy: "accept"}, "add"); err != nil {
 		return err
 	}
-	apps := u.loadPortByApp()
-	for _, app := range apps {
-		if err := client.Port(fireClient.FireInfo{Port: app.HttpPort, Protocol: "tcp", Strategy: "accept"}, "add"); err != nil {
-			return err
-		}
-	}
 
 	return client.Reload()
 }
@@ -545,44 +643,33 @@ func (u *FirewallService) addPortRecord(req dto.PortRuleOperate) error {
 		return hostRepo.DeleteFirewallRecord("port", req.Port, req.Protocol, req.Address, req.Strategy)
 	}
 
-	return hostRepo.SaveFirewallRecord(&model.Firewall{
+	if err := hostRepo.SaveFirewallRecord(&model.Firewall{
 		Type:        "port",
 		Port:        req.Port,
 		Protocol:    req.Protocol,
 		Address:     req.Address,
 		Strategy:    req.Strategy,
 		Description: req.Description,
-	})
+	}); err != nil {
+		return fmt.Errorf("add record %s/%s failed (strategy: %s, address: %s), err: %v", req.Port, req.Protocol, req.Strategy, req.Address, err)
+	}
+
+	return nil
 }
 
 func (u *FirewallService) addAddressRecord(req dto.AddrRuleOperate) error {
 	if req.Operation == "remove" {
 		return hostRepo.DeleteFirewallRecord("address", "", "", req.Address, req.Strategy)
 	}
-	return hostRepo.SaveFirewallRecord(&model.Firewall{
+	if err := hostRepo.SaveFirewallRecord(&model.Firewall{
 		Type:        "address",
 		Address:     req.Address,
 		Strategy:    req.Strategy,
 		Description: req.Description,
-	})
-}
-
-func listIpRules(strategy string) ([]string, error) {
-	client, err := firewall.NewFirewallClient()
-	if err != nil {
-		return nil, err
+	}); err != nil {
+		return fmt.Errorf("add record failed (strategy: %s, address: %s), err: %v", req.Strategy, req.Address, err)
 	}
-	addrs, err := client.ListAddress()
-	if err != nil {
-		return nil, err
-	}
-	var rules []string
-	for _, addr := range addrs {
-		if addr.Strategy == strategy {
-			rules = append(rules, addr.Address)
-		}
-	}
-	return rules, nil
+	return nil
 }
 
 func checkPortUsed(ports, proto string, apps []portOfApp) string {
